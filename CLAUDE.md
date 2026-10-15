@@ -12,6 +12,26 @@ Nothing private goes in this file (no local paths, emails or account names).
 It never ships: `.pkgmeta` leaves it out of the zip and
 `tools/check_package.py` refuses it.
 
+## This repo is the Retail copy
+
+`Blackthornes/Blackthornes_Farmer_Retail` is Farmer for Retail WoW, copied
+from `Blackthornes/Blackthornes_Farmer` (Forever) with its history on
+2026-10-15. The owner's rule: Forever comes first, and nothing done here may
+ever touch the Forever addon. So:
+
+- Never push to, or open PRs on, the Forever repo from work here. Changes
+  come over from Forever on purpose (cherry-pick or copy), never the other
+  way.
+- The Retail TOC lists none of the Classic or Forever data
+  (`env.FOREVER_DATA` in `tools/testenv.lua`); the files stay in the repo
+  only so Forever changes merge cleanly. `tools/test_retail.lua` checks it
+  and that the addon loads and logs in without them.
+- Never put Forever's CurseForge ID (1710618) in the TOC:
+  `tools/check_release.py` refuses a tag that does. Retail gets its own
+  project once it works in game.
+- The rest of this file describes the Forever addon; read it as the
+  starting point, not as what Retail has.
+
 ## What Tradeskills provides
 
 Tradeskills is the house standard for layout (`Core/ Data/ Logic/ UI/

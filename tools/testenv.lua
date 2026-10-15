@@ -399,6 +399,21 @@ local UI_FILES = {
     "UI/Settings.lua",
 }
 
+-- Classic and Forever data the Retail TOC leaves out. `opts.retail` loads
+-- the addon without them, as Retail does (tools/test_retail.lua).
+env.FOREVER_DATA = {
+    ["Data/NpcNames.lua"] = true,
+    ["Data/ForeverNpcNames.lua"] = true,
+    ["Data/Data_Mining.lua"] = true,
+    ["Data/Data_Herbalism.lua"] = true,
+    ["Data/Data_Cloth.lua"] = true,
+    ["Data/Data_Leather.lua"] = true,
+    ["Data/Data_Misc.lua"] = true,
+    ["Data/Data_MobDrops.lua"] = true,
+    ["Data/Harvest_Carryover.lua"] = true,
+    ["Data/Data_Harvested.lua"] = true,
+}
+
 --- Is there a generated harvest file to load?
 function env.HasHarvested()
     local handle = io.open(ROOT .. "/" .. HARVESTED, "r")
@@ -425,9 +440,11 @@ function env.Load(opts)
         chunk("Blackthornes_Farmer", ns)
     end
 
-    for _, file in ipairs(FILES) do Run(file) end
+    for _, file in ipairs(FILES) do
+        if not (opts.retail and env.FOREVER_DATA[file]) then Run(file) end
+    end
 
-    if opts.harvested and env.HasHarvested() then Run(HARVESTED) end
+    if opts.harvested and not opts.retail and env.HasHarvested() then Run(HARVESTED) end
 
     if opts.ui then
         for _, file in ipairs(UI_FILES) do Run(file) end
