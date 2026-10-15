@@ -1,4 +1,4 @@
-## Interface: 120000, 120001, 120005, 120007
+## Interface: 120105
 ## Title: Blackthornes Farmer
 ## Notes: Search for a material or item and get the mobs, zones and levels to farm it.
 ## Author: Blackthornes
