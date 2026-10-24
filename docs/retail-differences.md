@@ -172,7 +172,7 @@ never rewritten. Tested in `tools/test_roadtomax.lua`.
 **Sync rule: Blend.** Keep these lines if Forever changes `OnLoot`,
 `GrindGather:Zones` or `SpotsOn`.
 
-## 7. Item icons on map pins, fishing pins, nearby nodes join (PR #10)
+## 7. Item icons on map pins, fishing pins, nearby nodes join (PR #10, the pin fix)
 
 `UI/MapMarkers.lua`: `ItemIcon`, `NodeItems`, `SpotItems`, `SpotIcon`,
 `BackAt`, `IsBack`, `CreatePin`, `DrawWorld` (redrawn at `worldNextBack`),
@@ -184,8 +184,16 @@ in `Gathering:OnLoot`. `Logic/Fishing.lua`: `Fishing:OnLoot` adds a
 spots and reads `spot.also`. Saved: spots' `items` and `also` (never rename
 them). Test `tools/test_mapicons.lua`.
 
+Since the pin fix: `MapMarkers.RoundIcon` (a mask texture, used by
+`CreatePin` and `UI/GrindPins.lua`'s pin), `WORLD_SIZE` 22, `JOIN_PIXELS`,
+`Group`, `GroupItems`, `GroupIcon`, `GroupNode`, `Single`,
+`ShowGroupTooltip`, the count on `CreatePin`, `Dress` taking a group, and
+`PlaceWorld` drawing groups. `Logic/Respawn.lua`: `Respawn:GroupLines` and
+the `farmerMarker` owner check in `OnTooltipShown`. Locale lines for the
+group hover.
+
 **Sync rule: Blend.** Forever changes to map markers, spots or grow-back
-times go on top of Retail's version, keeping the item icons, the fish
+times go on top of Retail's version, keeping the item icons, the round mask, joined pins, the fish
 spots (never teaching a grow-back time) and the 3 m join. Never take
 Forever's `AddSpot` or `DrawWorld` whole.
 
