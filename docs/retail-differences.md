@@ -211,3 +211,22 @@ every corpse (Retail)" and "Levels that follow you (Retail)".
 
 **Sync rule: Blend.** Take Forever's new and changed sections, keep the
 Retail ones, and move "Last caught up to" to the new Forever commit.
+
+## 10. The arrow moves on past empty spots
+
+`Logic/Arrow.lua`: `Arrow.CHECKED`, `Arrow.SWEEP`, `Arrow.checked`,
+`Arrow:WasChecked`, `Arrow:NoteArrivals` (called from `Arrow:State` every
+`SWEEP` seconds), `target.checked` in `Arrow:Targets` and
+`Arrow:GrindTargets` (sorted after the rest, like a resting spot), and
+`GrindTargets` taking `mob.kind`. `Logic/GrindGather.lua`: `NodeCamp`'s
+spots carry `kind = "node"`. Nothing saved. Tests in `tools/test_arrow.lua`.
+
+A node spot you come within `ARRIVED_NODE` (12 yards) of counts as checked
+for `CHECKED` (3 minutes), gathered or not, so the arrow goes on to the next
+spot and not back (the owner, 2026-10-24: sometimes the node isn't there
+yet). Passing one on the way to another checks it too, and reaching a spot
+picked with a right-click lets the pick go. Grind tab and Road to max node
+spots now arrive at a node's 12 yards, not a mob's 35.
+
+**Sync rule: Blend.** Forever changes to how the arrow lists or sorts places
+go on top of this; keep the checked spots.
