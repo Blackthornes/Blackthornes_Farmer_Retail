@@ -32,9 +32,17 @@ local Grinding = ns.NewModule("Grinding")
 
 local Util = ns.Util
 
--- Forever's level cap: the steppers go no higher.
+-- The level steppers' range. The top is the game's level cap, never under
+-- 60: mobs up to 60 are in the data even while the beta stops at 30.
 Grinding.MIN_LEVEL = 1
-Grinding.MAX_LEVEL = 30
+Grinding.MAX_LEVEL = 60
+
+--- The highest level the steppers reach: the game's cap, at least 60.
+function Grinding.MaxLevel()
+    local cap = ns.XP and ns.XP.MaxLevel and ns.XP.MaxLevel()
+    if type(cap) == "number" and cap > Grinding.MAX_LEVEL then return cap end
+    return Grinding.MAX_LEVEL
+end
 
 -- With no range picked, the band around your own level.
 Grinding.BELOW = 2
@@ -49,18 +57,25 @@ Grinding.TYPES = { "Humanoid", "Beast", "Undead", "Demon", "Elemental" }
 Grinding.OTHER = "Other"
 
 -- What a mob gives, as facts in the data; Ore and Herbs list nodes rather
--- than mobs (Logic/GrindGather.lua). The leather view keeps the key
--- "skinning", as saved in grindGives before it was called Leather.
+-- than mobs, and Fish the spots you fished (Logic/GrindGather.lua). The
+-- leather view keeps the key "skinning", as saved in grindGives before it
+-- was called Leather.
 Grinding.GIVES = {
     { key = "cloth", label = L["Cloth"] },
     { key = "skinning", label = L["Leather"] },
     { key = "ore", label = L["Ore"] },
     { key = "herbs", label = L["Herbs"] },
+    { key = "fish", label = L["Fish"] },
 }
 
 --- Does the Grind tab list nodes, not mobs, for `gives`?
 function Grinding.IsNodeView(gives)
     return gives == "ore" or gives == "herbs"
+end
+
+--- Does it list the spots you fished?
+function Grinding.IsFishView(gives)
+    return gives == "fish"
 end
 
 --- Your Skinning skill, or nil when you lack it or the client will not say.
@@ -235,7 +250,7 @@ end
 
 local function Clamp(level)
     level = math.floor((tonumber(level) or Grinding.MIN_LEVEL) + 0.5)
-    return math.max(Grinding.MIN_LEVEL, math.min(Grinding.MAX_LEVEL, level))
+    return math.max(Grinding.MIN_LEVEL, math.min(Grinding.MaxLevel(), level))
 end
 Grinding.Clamp = Clamp
 
@@ -247,7 +262,7 @@ function Grinding:Range()
     if low and high then return Clamp(low), Clamp(high) end
 
     local level = ns.Spots:Player().level
-    if not level then return Grinding.MIN_LEVEL, Grinding.MAX_LEVEL end
+    if not level then return Grinding.MIN_LEVEL, Grinding.MaxLevel() end
     return Clamp(level - Grinding.BELOW), Clamp(level + Grinding.ABOVE)
 end
 
@@ -417,7 +432,9 @@ function Grinding:Mobs()
         local cloth = item.category == "Cloth"
         local itemHidden = ns.DB:HidesItem(item)
         for _, source in ipairs(item.sources or {}) do
-            if CREATURE_KINDS[source.kind or "mob"] and type(source.name) == "string"
+            -- Classic's generated drop rows are for the search only
+            -- (Data/Data_ClassicDrops.lua): the camps stay as they were.
+            if not source.searchOnly and CREATURE_KINDS[source.kind or "mob"] and type(source.name) == "string"
                 and type(source.zone) == "string" and (skinning or source.kind ~= "skinning")
                 and not ns.DB:IsHiddenSource(source.name) then
                 local mob = Spot(source.name, source.zone, source.location)
@@ -744,6 +761,8 @@ function Grinding:Command(rest)
             self:SetGives(word == "cloth" and "cloth" or "skinning")
         elseif word == "ore" or word == "mining" or word == "herbs" or word == "herb" or word == "herbalism" then
             self:SetGives((word == "ore" or word == "mining") and "ore" or "herbs")
+        elseif word == "fish" or word == "fishing" then
+            self:SetGives("fish")
         else
             local typed = word:gsub("s$", "")
             for _, kind in ipairs(Grinding.TYPES) do

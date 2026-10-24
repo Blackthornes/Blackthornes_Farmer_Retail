@@ -40,6 +40,15 @@ local Util = ns.Util
 XPBarUI.WIDTH = 520
 XPBarUI.BAR = 18
 XPBarUI.LINE = 16
+-- Room kept between the two words on one line around the bar.
+XPBarUI.LINE_GAP = 18
+-- When the two are too long for one line, each wraps in its own share of
+-- the bar, one at each end. A share narrower than this would wrap word by
+-- word, so the right one takes a line of its own instead.
+XPBarUI.MIN_SHARE = 150
+-- The least of the gold and the rim that stays while the bar is transparent.
+XPBarUI.GOLD_FLOOR = 0.55
+XPBarUI.RIM_FLOOR = 0.4
 XPBarUI.CARD = 380
 -- Seconds the cheer stays up while the mouse is away from it.
 XPBarUI.HOLD = 6
@@ -132,16 +141,15 @@ function XPBarUI:Build()
     frame:EnableMouse(true)
     pcall(frame.RegisterForDrag, frame, "LeftButton")
 
+    -- Placed by XPBarUI:Layout once their words are known.
     local topLeft = InfoLabel(frame)
-    topLeft:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, 0)
     local topRight = InfoLabel(frame, "RIGHT")
-    topRight:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, 0)
 
     local bar = CreateFrame("Frame", nil, frame)
-    bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(LINE + 3))
-    bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -(LINE + 3))
     bar:SetHeight(BAR)
-    Theme.Fill(bar, "well", 0.95)
+    -- See-through (UI/SeeThrough.lua, `xpBarSeeThrough`): only the well
+    -- thins out; the gold, the bands and the ticks stay.
+    ns.SeeThrough:AddGlass("xpbar", Theme.Fill(bar, "well", 0.95))
     Theme.Border(bar, "metal")
     Theme.Halo(bar, 7, 0.18)
     pcall(bar.SetClipsChildren, bar, true)
@@ -161,6 +169,18 @@ function XPBarUI:Build()
     self.restedCap:SetWidth(2)
     self.sessionMark = Texture(bar, "OVERLAY", 1, 1, 1, 1, 0.8)
     self.sessionMark:SetWidth(2)
+
+    -- Transparent thins the whole bar, not only the well (the owner,
+    -- 2026-10-17: the well alone hardly showed). The gold keeps enough
+    -- to read how far along you are, and the rim enough to see the bar.
+    for _, edge in ipairs(bar.borderTextures or {}) do
+        ns.SeeThrough:AddGlass("xpbar", edge, self.RIM_FLOOR)
+    end
+    ns.SeeThrough:AddGlass("xpbar", self.fill, self.GOLD_FLOOR)
+    for _, band in ipairs({ self.sheen, self.shade, self.session, self.quest,
+        self.rested, self.restedCap, self.sessionMark }) do
+        ns.SeeThrough:AddGlass("xpbar", band)
+    end
 
     -- A tick every tenth, each with a flash for when it is crossed.
     self.ticks, self.flashes = {}, {}
@@ -223,9 +243,7 @@ function XPBarUI:Build()
     label:SetPoint("CENTER", over, "CENTER", 0, 0)
 
     local bottomLeft = InfoLabel(frame)
-    bottomLeft:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 4, 0)
     local bottomRight = InfoLabel(frame, "RIGHT")
-    bottomRight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 0)
 
     self.labels = { topLeft = topLeft, topRight = topRight, bar = label,
         bottomLeft = bottomLeft, bottomRight = bottomRight }
@@ -262,10 +280,133 @@ function XPBarUI:Build()
     self.grip:SetAlpha(0)
     self.grip:HookScript("OnEnter", function() XPBarUI.grip:SetAlpha(1) end)
 
+    ns.SeeThrough:Attach("xpbar", frame)
+
     self.frame = frame
+    self:Layout()
     self:Place()
     frame:Hide()
     return frame
+end
+
+--------------------------------------------------------------------------------
+-- The lines around the bar
+--------------------------------------------------------------------------------
+
+--- How tall one line of the words around the bar is, by the text size.
+function XPBarUI.LineHeight()
+    local size = tonumber(Theme.sizes and Theme.sizes.small) or 11
+    return math.max(XPBarUI.LINE, size + 5)
+end
+
+--- How wide a label's words are on screen, measured, never guessed.
+local function Width(label)
+    local text = label:GetText()
+    if type(text) ~= "string" or text == "" then return 0 end
+    return Theme.TextWidth("small", text) or 0
+end
+
+--- How tall a label is once it wraps inside `width`.
+local function Height(label, line)
+    local ok, height = pcall(label.GetStringHeight, label)
+    height = ok and tonumber(height) or nil
+    if not height or height < line then return line end
+    return math.ceil(height)
+end
+
+--- Puts one pair of labels on a line, side by side at the two ends. When
+--- they are too long for that, each wraps in its own share of the line,
+--- the longer one getting more; only when a share would be too narrow do
+--- they go on two lines. Returns their height, whether they were stacked
+--- and the two widths they were given.
+function XPBarUI.FitPair(left, right, room, line)
+    local leftWidth, rightWidth = Width(left), Width(right)
+    local leftRoom, rightRoom = room, room
+    local stacked = false
+    local open = room - XPBarUI.LINE_GAP
+    if leftWidth > 0 and rightWidth > 0 and leftWidth + rightWidth > open then
+        -- Each gets at least the least share (or all it needs, if less),
+        -- and what is left goes by how much more each one needs.
+        local leftLeast = math.ceil(math.min(leftWidth, XPBarUI.MIN_SHARE))
+        local rightLeast = math.ceil(math.min(rightWidth, XPBarUI.MIN_SHARE))
+        local spare = open - leftLeast - rightLeast
+        if spare < 0 then
+            stacked = true
+        else
+            local leftMore, rightMore = leftWidth - leftLeast, rightWidth - rightLeast
+            local more = leftMore + rightMore
+            local leftSpare = more > 0 and math.floor(spare * leftMore / more) or 0
+            leftRoom = leftLeast + leftSpare
+            rightRoom = open - leftRoom
+        end
+    end
+    pcall(left.SetWordWrap, left, true)
+    pcall(right.SetWordWrap, right, true)
+    left:SetWidth(leftRoom)
+    right:SetWidth(rightRoom)
+    if stacked then
+        return Height(left, line) + Height(right, line), true, leftRoom, rightRoom
+    end
+    return math.max(Height(left, line), Height(right, line)), false, leftRoom, rightRoom
+end
+
+--- Lays the words out round the bar so no two lines ever overlap, at any
+--- text size and in any language, and sizes the frame to fit them. The
+--- frame's top stays where it is.
+function XPBarUI:Layout()
+    local frame, labels, bar = self.frame, self.labels, self.bar
+    if not (frame and labels and bar) then return end
+    local line = self.LineHeight()
+    local room = self.WIDTH - 8
+
+    local topHeight, topStacked, topLeftRoom, topRightRoom =
+        self.FitPair(labels.topLeft, labels.topRight, room, line)
+    local bottomHeight, bottomStacked, bottomLeftRoom, bottomRightRoom =
+        self.FitPair(labels.bottomLeft, labels.bottomRight, room, line)
+    if topStacked then topHeight = topHeight + 2 end
+    if bottomStacked then bottomHeight = bottomHeight + 2 end
+
+    local key = table.concat({ topHeight, tostring(topStacked), topLeftRoom, topRightRoom,
+        bottomHeight, tostring(bottomStacked), bottomLeftRoom, bottomRightRoom }, ":")
+    if key == self.layoutKey then return end
+    self.layoutKey = key
+
+    for _, label in pairs(labels) do
+        if label ~= labels.bar then label:ClearAllPoints() end
+    end
+    labels.topLeft:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, 0)
+    if topStacked then
+        labels.topRight:SetPoint("TOPRIGHT", labels.topLeft, "BOTTOMRIGHT", 0, -2)
+    else
+        labels.topRight:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, 0)
+    end
+
+    bar:ClearAllPoints()
+    bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(topHeight + 3))
+    bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -(topHeight + 3))
+
+    labels.bottomLeft:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 4, -4)
+    if bottomStacked then
+        labels.bottomRight:SetPoint("TOPRIGHT", labels.bottomLeft, "BOTTOMRIGHT", 0, -2)
+    else
+        labels.bottomRight:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", -4, -4)
+    end
+
+    -- A bar dragged near the bottom of the screen can be held by its
+    -- bottom edge; hold it by its top while it grows, so the bar stays put.
+    local height = topHeight + 3 + self.BAR + 4 + bottomHeight + 2
+    local okLeft, left = pcall(frame.GetLeft, frame)
+    local okTop, top = pcall(frame.GetTop, frame)
+    left = okLeft and tonumber(left) or nil
+    top = okTop and tonumber(top) or nil
+    local okHeight, was = pcall(frame.GetHeight, frame)
+    was = okHeight and tonumber(was) or nil
+    if left and top and was and math.abs(was - height) > 0.5 then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    end
+    frame:SetWidth(self.WIDTH)
+    frame:SetHeight(height)
 end
 
 --------------------------------------------------------------------------------
@@ -413,6 +554,7 @@ function XPBarUI:Refresh()
         end
         labels.bottomRight:SetText(table.concat(parts, "  |  "))
     end
+    self:Layout()
 
     -- The bar itself.
     local share = summary.share
@@ -1285,7 +1427,7 @@ ns.RegisterCommand("xpbar", L["the XP bar (on/off, cheer on/off, chime on/off, g
         local hide
         if value == "show" then hide = false elseif value == "hide" then hide = true else hide = not XPBarUI.HidesGame() end
         XPBarUI:SetHideGame(hide)
-        ns.Print(hide and L["the game's XP bar is see-through while yours shows."]
+        ns.Print(hide and L["the game's XP bar is transparent while yours shows."]
             or L["the game's XP bar is back."])
     elseif word == "reset" then
         XPBarUI:ResetPlace()

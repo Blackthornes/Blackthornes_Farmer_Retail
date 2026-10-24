@@ -230,7 +230,8 @@ Search.FOUND_SAMPLE = 20
 --- What the found items are built from: moves when a corpse, a gather or
 --- a cast is recorded, or the data or the client's names change.
 function Search:FoundVersion()
-    local key = ("%d:%d:%d:%d:%d"):format(
+    local key = ("%d:%d:%d:%d:%d:%d"):format(
+        ns.Containers and ns.Containers.changes or 0,
         ns.Harvest and ns.Harvest.changes or 0,
         ns.Gathering and ns.Gathering.clock or 0,
         ns.Fishing and ns.Fishing.clock or 0,
@@ -291,9 +292,11 @@ function Search:FoundItems()
     local function AddKnown(known, source)
         local entry = extra[known.name]
         if not entry then
-            entry = { item = known, has = {}, sources = {} }
+            entry = { item = known, has = {}, sources = {}, mine = {} }
             for _, have in ipairs(type(known.sources) == "table" and known.sources or {}) do
-                if type(have) == "table" then
+                -- A Classic row is no reason to leave your own spot out:
+                -- yours shows and the Classic one goes (WithYourSpots).
+                if type(have) == "table" and have.provenance ~= "classic" then
                     entry.has[SpotKey(have.kind, have.name, have.zone)] = true
                 end
             end
@@ -302,6 +305,7 @@ function Search:FoundItems()
         local key = SpotKey(source.kind, source.name, source.zone)
         if entry.has[key] then return end
         entry.has[key] = true
+        entry.mine[key] = true
         source.provenance = "forever"
         entry.sources[#entry.sources + 1] = source
     end
@@ -381,6 +385,35 @@ function Search:FoundItems()
         end
     end
 
+    -- What came out of the clams and sacks you opened from your bags: where
+    -- you got the clam, from your own kills, and how often one held it.
+    local Containers = ns.Containers
+    local opened = Containers and ns.db and type(ns.db.containers) == "table"
+        and ns.db.containers.opened
+    for container, entry in pairs(type(opened) == "table" and opened or {}) do
+        entry = Containers:Entry(container)
+        if entry and type(entry.items) == "table" then
+            local seen = {}
+            for _, record in pairs(Harvest and Harvest.records or {}) do
+                local dropped = type(record) == "table" and type(record.items) == "table"
+                    and record.items[container]
+                local zone = type(dropped) == "table" and Text(record.zone)
+                if zone and not seen[zone:lower()] then
+                    seen[zone:lower()] = true
+                    for name, got in pairs(entry.items) do
+                        if type(got) == "table" then
+                            Add(name, got.id, { kind = "container", name = container, zone = zone,
+                                location = Text(record.location), coords = Coords(record.coords),
+                                minLevel = tonumber(record.minLevel), maxLevel = tonumber(record.maxLevel),
+                                chance = Rate(got.opens, entry.opens),
+                                dropText = Count(got.opens, entry.opens) })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     table.sort(items, function(a, b) return a.name < b.name end)
     self.found = { key = key, at = GetTime and GetTime() or 0, items = items,
         extra = extra, merged = {} }
@@ -400,7 +433,10 @@ function Search:WithYourSpots(item)
     copy = {}
     for k, v in pairs(item) do copy[k] = v end
     local sources = {}
-    for _, source in ipairs(item.sources or {}) do sources[#sources + 1] = source end
+    for _, source in ipairs(item.sources or {}) do
+        local key = ("%s|%s|%s"):format(source.kind or "", (source.name or ""):lower(), (source.zone or ""):lower())
+        if not (source.provenance == "classic" and entry.mine[key]) then sources[#sources + 1] = source end
+    end
     for _, source in ipairs(entry.sources) do sources[#sources + 1] = source end
     copy.sources = sources
     built.merged[item.name] = copy

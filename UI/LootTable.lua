@@ -61,6 +61,10 @@ local GAP = 6
 
 local FALLBACK_ICON = [[Interface\Icons\INV_Misc_QuestionMark]]
 
+-- The Map button at the top right, beside the three numbers.
+local MAP_WIDTH = 56
+local MAP_LEFT = PADDING + 400
+
 local function RateColor(chance)
     if chance >= 40 then return "good" end
     if chance >= 15 then return "accent" end
@@ -149,17 +153,11 @@ function LootTableUI:Table(mobName)
 
             local unit = Value and Value:WorthOf(item.name, id)
             if unit then row.perKill = item.corpses / loot.kills * item.perCorpse * unit end
-        else
-            -- Until then, the guild's rate for it, if it has one. Only the
-            -- rate: the kills and what dropped stay the player's own.
-            local GuildShare = ns.GuildShare
-            local chance = GuildShare and GuildShare:RateFor(loot.mob, item.name)
-            if chance then
-                row.chance = chance
-                row.rate = Tracker.FormatChance(chance)
-                out.guildRates = true
-            end
         end
+        -- A quest item says so where its worth would be (2026-10-18).
+        if not row.perKill and Value and Value:IsQuest(item.name, id) then row.quest = true end
+        -- Until then no rate shows, not even the guild's or the shipped
+        -- data's: finding them is the player's own (the owner, 2026-10-15).
 
         out.rows[#out.rows + 1] = row
     end
@@ -270,8 +268,8 @@ function LootTableUI:ContentsLines(name)
     local Value, Containers = ns.Value, ns.Containers
     if not (Value and Containers and name) then return lines end
 
-    local ok, store = pcall(Containers.Store, Containers)
-    local entry = ok and type(store) == "table" and store[name]
+    local ok, entry = pcall(Containers.Entry, Containers, name)
+    entry = ok and entry
     local opens = type(entry) == "table" and tonumber(entry.opens) or 0
     if opens <= 0 then return lines end
 
@@ -296,7 +294,8 @@ function LootTableUI:ContentsLines(name)
         if item.each >= 1.05 then
             rate = L.Format("%s, %s each", rate, ("%.1f"):format(item.each))
         end
-        lines[#lines + 1] = { ("  %s  %s"):format(item.name, rate), Value.Coins(item.perOpen) }
+        lines[#lines + 1] = { ("  %s  %s"):format(ns.Util.ColorItem(item.name, item.id), rate),
+            Value.Coins(item.perOpen) }
     end
     if #details.unpriced > 0 then
         lines[#lines + 1] = { L.Format("  %d more with no price", #details.unpriced), nil, "muted" }
@@ -312,7 +311,7 @@ local function ShowItemTooltip(row)
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
 
     local shown = data.id and pcall(GameTooltip.SetItemByID, GameTooltip, data.id)
-    if not shown then GameTooltip:AddLine(data.name) end
+    if not shown then GameTooltip:AddLine(ns.Util.ColorItem(data.name, data.id)) end
 
     for _, line in ipairs(LootTableUI:ContentsLines(data.name)) do
         local r, g, b = Theme.Unpack(line[3] or "text")
@@ -329,6 +328,11 @@ local function UpdateRow(row, data)
     row.icon:SetTexture(look.icon or Theme.ItemIcon(data.id) or FALLBACK_ICON)
 
     local r, g, b, a = HexColor(look.color)
+    -- No loot link kept its colour: the item's rarity from the client.
+    if not r then
+        r, g, b = ns.Util.ItemRGB(data.name, data.id)
+        a = r and 1 or nil
+    end
     if r then
         row.name:SetTextColor(r, g, b, a)
     else
@@ -336,6 +340,7 @@ local function UpdateRow(row, data)
     end
 
     local quality = ns.TrackerFX and ns.TrackerFX.QualityOf(data.name) or nil
+    if not quality then quality = ns.Util.ItemQuality(data.name, data.id) end
     if r and quality and quality >= 1 then
         for _, edge in ipairs(row.iconFrame.borderTextures) do
             edge:SetColorTexture(r, g, b, quality >= 2 and 1 or 0.5)
@@ -386,6 +391,9 @@ local function UpdateRow(row, data)
     if data.perKill then
         row.cells.perKill:SetText(ns.Value.Coins(data.perKill))
         row.cells.perKill:SetTextColor(Theme.Unpack("good"))
+    elseif data.quest then
+        row.cells.perKill:SetText(L["Quest"])
+        row.cells.perKill:SetTextColor(Theme.Unpack("accent"))
     else
         row.cells.perKill:SetText("--")
         row.cells.perKill:SetTextColor(Theme.Unpack("dim"))
@@ -479,6 +487,30 @@ function LootTableUI:Build()
     self.kills = Stat(frame, PADDING, L["KILLS"])
     self.worth = Stat(frame, PADDING + 130, L["WORTH PER KILL"])
     self.coin = Stat(frame, PADDING + 280, L["COIN PER KILL"])
+
+    -- Show on Map, as the search's mob rows have it: the kill heat map's
+    -- glow for this mob, only while the heat map is on the world map.
+    local map = Widgets.CreateButton(frame, L["Map"], function()
+        local name = LootTableUI:MapName()
+        if not (name and ns.Heat and ns.UI.MapHasSpots("mob", name)) then return end
+        ns.Heat:ShowOnMap("mob", name)
+        LootTableUI:DressMap()
+    end, { width = MAP_WIDTH, height = 22 })
+    map:SetPoint("TOPRIGHT", -PADDING, -(HEADER + 12))
+    map:HookScript("OnEnter", function(self)
+        local name = LootTableUI:MapName()
+        if not (name and GameTooltip) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(ns.UI.MapHasSpots("mob", name)
+            and L["Show where you find this on your map."]
+            or L["Kill a few first and it will show here."], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    map:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    map:Hide()
+    self.mapButton = map
 
     local status = Theme.CreateLabel(frame, "small", "muted")
     status:SetPoint("TOPLEFT", PADDING, -STATUS_TOP)
@@ -597,7 +629,8 @@ function LootTableUI:Render()
     data.byTally = data.rows
     data.rows = self:SortRows(data.rows)
     self.data = data
-    if self.plate then self.plate:SetTitle(data.mob) else self.title:SetText(data.mob) end
+    local title = ns.Tracker.ShowKey(data.mob)
+    if self.plate then self.plate:SetTitle(title) else self.title:SetText(title) end
 
     -- Opening on a mob counts its kills up from nothing.
     local function Kills(count)
@@ -678,6 +711,7 @@ function LootTableUI:Render()
         self.footer:SetText(L["Prices: vendor price. Load Blackthornes Tradeskills for market prices."])
     end
 
+    self:DressMap()
     local width = self:WidthFor(data.rows, status, data.where)
     self.frame:SetWidth(width)
 
@@ -731,7 +765,40 @@ function LootTableUI:WidthFor(rows, status, where)
     needs = math.max(needs, PADDING * 2 + Theme.TextWidth("small", where) + 4)
     needs = math.max(needs, PADDING * 2 + Theme.TextWidth("tiny", self.footer and self.footer:GetText()) + 4)
 
+    -- Room for the Map button after the numbers while it shows.
+    if self:MapName() then needs = math.max(needs, MAP_LEFT + MAP_WIDTH + PADDING) end
+
     return math.min(MAX_WIDTH, math.max(WIDTH, math.ceil(needs)))
+end
+
+--- The mob the Map button shows, by its name alone (the heat map keeps
+--- kills by name), or nil while the heat map is off the world map.
+function LootTableUI:MapName()
+    if not (ns.Heat and ns.Heat.WorldOn() and ns.UI and ns.UI.MapHasSpots) then return nil end
+    local mob = self.mob
+    if type(mob) ~= "string" then return nil end
+    local name = ns.Tracker and ns.Tracker.NameOf and ns.Tracker.NameOf(mob) or mob
+    return type(name) == "string" and name ~= "" and name or nil
+end
+
+--- The Map button: gold while the map shows this mob, dim before any kill
+--- with a spot, hidden while the heat map is off the world map.
+function LootTableUI:DressMap()
+    local button = self.mapButton
+    if not button then return end
+    local name = self:MapName()
+    if not name then
+        button:Hide()
+        return
+    end
+    if ns.Heat:Mob() == name then
+        button:SetLabelColor("accent")
+    elseif not ns.UI.MapHasSpots("mob", name) then
+        button:SetLabelColor("dim")
+    else
+        button:SetLabelColor(nil)
+    end
+    button:Show()
 end
 
 --- Tall enough for `count` rows, within MIN_HEIGHT and MAX_HEIGHT.
@@ -795,9 +862,19 @@ function LootTableUI:Refresh()
     if self:IsShown() then self:Render() end
 end
 
+-- An item's rarity came in late: the rows on screen take its colour.
+ns.Util.OnRarity("lootTable", function()
+    if LootTableUI:IsShown() and LootTableUI.list then LootTableUI.list:Refresh() end
+end)
+
 ns.RegisterCommand("loot", L["open a mob's full loot table"], function(rest)
     local Tracker = ns.Tracker
     local mobName = Tracker:ResolveMob(rest or "")
+    -- A name killed in more than one zone opens on this zone's line, or
+    -- the one last looted.
+    if mobName then
+        mobName = (Util.Trim(rest or "") == "" and Tracker.currentKey) or Tracker:KeyHere(mobName)
+    end
 
     if not (mobName and LootTableUI:Show(mobName)) then
         local wanted = Util.Trim(rest or "")

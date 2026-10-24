@@ -23,6 +23,98 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.45.0
+
+- You can set a kill goal, for any mob or one mob. It shows first in your Goals panel, and a summary opens when you finish. Start one with Set another in the Goals panel.
+- The Ore, Herbs and Leather views on the Grind tab show your way from your skill to 300.
+- With Tradeskills, Goblin Gold's hover card shows this week's kills and what their loot was worth.
+
+Fixes and changes:
+
+- Several bug fixes for the Grind tab, Open After Loot, guild sharing and the Settings page.
+
+## 0.44.0
+
+- Loot Feed shows what you loot in a small list, with the coin and what it's all worth. It's off until you tick it on the Loot page of Settings.
+- The trash can in your bags now puts a red glow round the item it picked. It's on the Loot page, under Trash Can When Full.
+
+Fixes and changes:
+
+- Several bug fixes for the XP bar and for looting with fast-loot addons.
+
+## 0.43.0
+
+- Each tooltip line Farmer adds can be Off, Shift or Always. You pick under Tooltips on the Map & goals page of Settings.
+- Kill count on nameplates has a Counter Position choice. It can sit above, below, left or right of the name.
+
+Fixes and changes:
+
+- Coin and items from Pick Pocket count toward your session loot and gold.
+- The words around the XP bar don't run into each other now.
+
+## 0.42.0
+
+- Farmer speaks Simplified Chinese, French, Spanish and Russian now if your game is in one of those.
+
+## 0.41.0
+
+- A heat map shows where you have killed on the world map and the minimap. It's off until you turn it on under Kill Heat on the Map & goals page of Settings. Then press Map beside a mob or item in the search, or on a mob's loot card.
+- Rankings can leave Uncommon, Rare and Epic drops out of worth per kill. The tick box is on the Rankings tab.
+- Quest items are marked Quest in the loot lists.
+
+Fixes and changes:
+
+- Item names use their rarity color in goals, loot tables, rankings and tooltips.
+- Various fixes to Where to farm and the search.
+
+## 0.40.2
+
+Fixes and changes:
+
+- Various fixes to Farmer.
+
+## 0.40.0
+
+- The World Drops view on Rankings shows how often Uncommon, Rare, Epic and Legendary gear drops at each mob level. You can sort it, and it points out the best level and yours.
+
+Fixes and changes:
+
+- The main window keeps the same size on every tab.
+
+## 0.39.0
+
+- The settings for making each panel transparent now sit together in one place on the UI page.
+
+Fixes and changes:
+
+- The XP bar fades all the way when it's transparent.
+- Various fixes to Farmer.
+
+## 0.38.0
+
+- The goals panel, Where to farm, your top 15, the run recap and the XP bar can be transparent. Each is off until you turn it on, and you pick how clear.
+
+## 0.37.0
+
+- The Kills & Loot panel can be see-through. It's off until you turn it on, and you pick how clear.
+- Tradeskills can tell which items you looted, gathered or fished yourself.
+- When your bags are full, the trash can points at two short stacks you can join first, so nothing gets thrown away.
+
+Fixes and changes:
+
+- Various fixes to Farmer.
+
+## 0.36.0
+
+- A mob with the same name in another zone gets its own line.
+- Tradeskills can show which of your kills drop items that break into an enchanting material.
+
+Fixes and changes:
+
+- Rankings show the levels you met a mob at when the data has none.
+- The minimap button is always on.
+- Various fixes to Farmer.
+
 ## 0.35.0
 
 - Thanks Manthieus, seancool_com and their communities for the ideas and feedback! Catch their streams at twitch.tv/Manthieus and twitch.tv/seancool_com.

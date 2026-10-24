@@ -4,6 +4,134 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.45.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Kill goals:** set a goal for a number of kills, of any mob or one mob. It shows first in the Goals panel, and a summary opens when you finish. Start one with Set another in the Goals panel.
+- **Gather to cap:** the Ore, Herbs and Leather views on the Grind tab open with a path from your skill to 300.
+- **Goblin Gold:** with Tradeskills, its hover card shows this week's kills and what their loot was worth.
+- **Bug fixes:** several bug fixes for the Grind tab, Open After Loot, guild sharing and the Settings page.
+
+## 0.44.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Loot Feed:** shows what you loot in a small list, with the coin and what it's all worth. It's off until you tick it on the Loot page of Settings.
+- **Trash can:** puts a red glow round the item it picked. It's on the Loot page, under Trash Can When Full.
+- **Bug fixes:** several bug fixes for the XP bar and for looting with fast-loot addons.
+
+## 0.43.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Tooltips:** each tooltip line Farmer adds can be Off, Shift or Always. The choices are under Tooltips on the Map & goals page.
+- **Kill count on nameplates:** Counter Position puts the count Above, Below, Left or Right of the name. It is under Tooltips on the Map & goals page.
+- **Bug fixes:** coin and items from Pick Pocket count toward your session loot and gold, the words around the XP bar no longer run into each other, and various other fixes to Farmer.
+
+## 0.42.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Languages:** on a Simplified Chinese, French, Spanish or Russian client, Farmer's own words are in that language.
+
+## 0.41.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Kill heat map:** a map of where you have killed, on the world map and the
+  minimap. Off until you tick it under Kill Heat on the Map & goals page. Press
+  Map beside a mob or item in the search, or on a mob's loot card, to see it.
+- **Rankings:** a tick box leaves Uncommon, Rare and Epic drops out of worth per
+  kill. It is on the Rankings tab, with a row on the UI page of Settings.
+- **Quest items:** they show as Quest in the loot lists.
+- **Rarity colors:** item names use their rarity color in goals, loot tables,
+  rankings and tooltips.
+- **Bug fixes:** Giant Clams stay on Where to farm, opened clams show in the
+  search, and various other fixes to Farmer.
+
+## 0.40.2
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Bug fixes:** various fixes to Farmer.
+
+## 0.40.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Bug fixes:** various fixes to Farmer.
+
+## 0.40.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Rankings:** the World Drops view has four tiles (Uncommon, Rare, Epic and
+  Legendary), a row for each mob level with its kills, a bar, the chance as a
+  percent and as 1 in N, BEST and YOUR LEVEL tags, and sortable columns.
+- **Main window:** Search, Rankings, Grind and Stats keep one size on every
+  tab.
+
+## 0.39.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Bug fixes:** various fixes to Farmer.
+
+## 0.39.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Transparent:** every Transparent setting now sits together in one
+  TRANSPARENT section on the UI page of Settings, and the XP bar thins out
+  all the way when it is transparent, not only its middle.
+- **Bug fixes:** various fixes to Farmer.
+
+## 0.38.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Transparent:** the goals panel, Where to farm, your top 15, the run recap
+  and the XP bar can be made transparent too. Each has its own setting, off
+  until you turn it on, set to Some, More or Most.
+
+## 0.37.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Farmed:** Tradeskills can ask which items you looted, gathered or fished
+  yourself, for its Profit by method view.
+- **See-Through:** the Kills & Loot panel can be made see-through. "See-Through:" on the Kill Tally page, off until ticked, with "How Clear:" set to Some, More or Most.
+- **Trash can:** two short stacks of one item that fit in one slot come
+  first, and a click joins them. A trade good counts as 1.5 times its worth,
+  so close calls go to junk.
+- **Bug fixes:** various fixes to Farmer.
+
+## 0.36.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Same name, another zone:** a mob with the same name in two zones gets a
+  line for each zone in Rankings, the kills panel, the loot table, tooltips
+  and nameplates. Kills from before are sorted by zone once, from your loot
+  records.
+- **Find a material:** Tradeskills' Disenchanting tab can list the mobs whose
+  drops break into an enchanting material, from your own kills.
+- **Rankings:** the Level column shows the levels you met a mob at when the
+  data has no row for it.
+- **Minimap button:** always on, so the setting is gone.
+- **Bug fixes:** various fixes to Farmer.
+
 ## 0.35.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so

@@ -374,9 +374,8 @@ function Value:Contents(name)
     local Containers = ns.Containers
     if not (Containers and name) then return nil end
 
-    local ok, store = pcall(Containers.Store, Containers)
-    local entry = ok and type(store) == "table" and store[name]
-    if type(entry) ~= "table" or type(entry.items) ~= "table" then return nil end
+    local ok, entry = pcall(Containers.Entry, Containers, name)
+    if not ok or type(entry) ~= "table" or type(entry.items) ~= "table" then return nil end
 
     local opens = tonumber(entry.opens) or 0
     if opens < self.MIN_OPENS then return nil end
@@ -424,6 +423,41 @@ function Value:WorthOf(name, id)
 end
 
 --------------------------------------------------------------------------------
+-- Quest items
+--------------------------------------------------------------------------------
+
+-- [itemID] = true or false, once the client has said.
+local questItems = {}
+
+-- The client's item class for quest items.
+Value.QUEST_CLASS = 12
+
+--- Is this a quest item? A player asked (2026-10-18, the owner said yes) to
+--- see them in the loot lists as quest items, not as loot with no price.
+--- They stay worth nothing, so no total changes. The client's item class
+--- first, else the data's category; false when neither says so.
+function Value:IsQuest(name, id)
+    id = tonumber(id or self:ItemID(name))
+    if id then
+        local known = questItems[id]
+        if known ~= nil then return known end
+
+        local instant = (C_Item and C_Item.GetItemInfoInstant) or _G.GetItemInfoInstant
+        if type(instant) == "function" then
+            local ok, found, _, _, _, _, classID = pcall(instant, id)
+            classID = ok and found ~= nil and tonumber(classID) or nil
+            if classID then
+                questItems[id] = classID == Value.QUEST_CLASS
+                return questItems[id]
+            end
+        end
+    end
+
+    local item = name and ns.DB and ns.DB.GetItem and ns.DB:GetItem(name)
+    return type(item) == "table" and item.category == "Quest item" or false
+end
+
+--------------------------------------------------------------------------------
 -- A mob's worth
 --------------------------------------------------------------------------------
 
@@ -433,7 +467,8 @@ end
 -- chance } (chance in percent of kills).
 function Value:FromTally(mobName)
     local Tracker = ns.Tracker
-    local mob = Tracker and Tracker:Store()[mobName]
+    -- A line's key: a mob's name, or one zone's line of it.
+    local mob = Tracker and Tracker:Tally(mobName)
     if type(mob) ~= "table" then return nil end
 
     local kills = tonumber(mob.kills) or 0
@@ -514,7 +549,20 @@ function Value:FromDatabase(mobName)
     local details = { basis = "database", priced = {}, unpriced = {}, coin = 0 }
     local total, seen = 0, {}
 
-    for _, entry in ipairs(ns.DB:ByName()[mobName] or {}) do
+    -- One zone's line of a mob reads that zone's rows, when the database
+    -- has any there.
+    local name, zone = mobName, nil
+    if ns.Tracker and ns.Tracker.SplitKey then name, zone = ns.Tracker.SplitKey(mobName) end
+    local rows = ns.DB:ByName()[name] or {}
+    if zone then
+        local here = {}
+        for _, entry in ipairs(rows) do
+            if entry.source and entry.source.zone == zone then here[#here + 1] = entry end
+        end
+        if #here > 0 then rows = here end
+    end
+
+    for _, entry in ipairs(rows) do
         local item, source = entry.item, entry.source
         if source.chance and not seen[item.name] then
             seen[item.name] = true
@@ -555,7 +603,8 @@ end
 --- What everything gathered this session is worth, in copper: the coin off
 --- your kills, plus every item looted, fished up or gathered times its unit
 --- price.
--- Returns total, details { coin, priced = count, unpriced = { names } }, or
+-- Returns total, details { coin, priced = count, unpriced = { names }, quest
+-- = count or nil }, or
 -- nil when nothing has been gathered yet. Items with no price are left out of
 -- the total and listed, never guessed.
 function Value:Session()
@@ -585,12 +634,17 @@ function Value:Session()
         if unit then
             total = total + count * unit
             details.priced = details.priced + 1
+        elseif self:IsQuest(name) then
+            -- Worth nothing, and no price is missing for it.
+            details.quest = (details.quest or 0) + 1
         else
             details.unpriced[#details.unpriced + 1] = name
         end
     end
 
-    if details.priced == 0 and coin == 0 and #details.unpriced == 0 then return nil end
+    if details.priced == 0 and coin == 0 and #details.unpriced == 0 and not details.quest then
+        return nil
+    end
 
     table.sort(details.unpriced)
 

@@ -146,9 +146,8 @@ function GrindPins:Draw()
         self.parent = view.canvas
     end
 
-    local okLevel, level = pcall(view.canvas.GetFrameLevel, view.canvas)
-    -- Over the gathered-node markers, which sit at the bottom.
-    level = (okLevel and tonumber(level) or 1) + 3
+    -- Over the gathered-node markers and the kill heat glow.
+    local level = ns.MapMarkers.BaseLevel(view.canvas) + 4
     local scale = 1 / view.scale
 
     local used = 0

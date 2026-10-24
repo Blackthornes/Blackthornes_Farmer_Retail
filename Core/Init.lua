@@ -28,7 +28,7 @@ end
 -- section changes this line too, and tools/check_release.py refuses a tag it
 -- does not match. Played straight from the repository there is no packager
 -- to fill in the TOC's version, so this is the one shown.
-ns.RELEASED_VERSION = "0.35.0"
+ns.RELEASED_VERSION = "0.45.0"
 
 -- The TOC carries @project-version@, which the release packager rewrites to
 -- the tag it is building, "v0.2.0" say. Running straight from the repository
@@ -287,11 +287,33 @@ end
 -- That guard needs LOOT_CLOSED. On a client without it nothing would end a
 -- window, and every loot after the first would go unread, so there each
 -- window is read on LOOT_READY alone (or LOOT_OPENED, without LOOT_READY).
+--
+-- Fast looting still lost some corpses (2026-10-19). The game hands an
+-- event to frames in the order they asked for it, and these events were
+-- only asked for at login, after every addon that asks as it loads: a fast
+-- loot addon that empties or closes the window on LOOT_READY did so before
+-- Farmer looked. So they are asked for here, as Farmer loads, ahead of most
+-- addons. And a window LOOT_READY finds already empty waits for its
+-- LOOT_OPENED rather than being taken as read, in case its slots come in
+-- by then; LOOT_OPENED reads it as it always did.
 local lootReaders = {}
 local lootReadEarly = false
 local lootHasReady, lootHasClosed = false, false
+-- Windows read, and LOOT_READYs that found the window empty, this session
+-- (the loot check, Harvest.LootCheck).
+ns.lootWindows = { read = 0, empty = 0 }
+
+--- How many slots the open loot window has, or nil when the client will not say.
+local function LootCount()
+    if type(GetNumLootItems) ~= "function" then return nil end
+    local ok, count = pcall(GetNumLootItems)
+    if not ok then return nil end
+    local readable, number = pcall(function() return count + 0 end)
+    return readable and type(number) == "number" and number or nil
+end
 
 local function ReadLoot()
+    ns.lootWindows.read = ns.lootWindows.read + 1
     -- One window's sources, read once for all the readers (Harvest:LootSources).
     local harvest = ns.Harvest
     if harvest then harvest.lootReading = {} end
@@ -303,22 +325,24 @@ local function ReadLoot()
     if harvest then harvest.lootReading = nil end
 end
 
+lootHasClosed = ns.RegisterEvent(ns, "LOOT_CLOSED", function() lootReadEarly = false end)
+lootHasReady = ns.RegisterEvent(ns, "LOOT_READY", function()
+    if lootReadEarly or #lootReaders == 0 then return end
+    -- Without LOOT_CLOSED, LOOT_OPENED reads nothing, so this is the only turn.
+    if lootHasClosed and LootCount() == 0 then
+        ns.lootWindows.empty = ns.lootWindows.empty + 1
+        return
+    end
+    lootReadEarly = lootHasClosed
+    ReadLoot()
+end)
+ns.RegisterEvent(ns, "LOOT_OPENED", function()
+    if lootReadEarly or #lootReaders == 0 or (lootHasReady and not lootHasClosed) then return end
+    ReadLoot()
+end)
+
 function ns.OnLootWindow(owner, fn)
     if type(fn) ~= "function" then return false end
-
-    if #lootReaders == 0 then
-        lootHasClosed = ns.RegisterEvent(ns, "LOOT_CLOSED", function() lootReadEarly = false end)
-        lootHasReady = ns.RegisterEvent(ns, "LOOT_READY", function()
-            if lootReadEarly then return end
-            lootReadEarly = lootHasClosed
-            ReadLoot()
-        end)
-        ns.RegisterEvent(ns, "LOOT_OPENED", function()
-            if lootReadEarly or (lootHasReady and not lootHasClosed) then return end
-            ReadLoot()
-        end)
-    end
-
     lootReaders[#lootReaders + 1] = { owner = owner, fn = fn }
     return true
 end
@@ -397,6 +421,17 @@ local DEFAULTS = {
     trackerHidden = false,
     trackerReport = false,
     trackerCelebrate = true,
+    -- The panel's dark glass thinned out so the world shows through (off
+    -- unless ticked, 2026-10-16), and how much of it stays (2 is "More").
+    trackerSeeThrough = false,
+    trackerSeeThroughLevel = 2,
+    -- See-through for the other panels (UI/SeeThrough.lua): 0 off, 1 to 3
+    -- Some, More, Most clear. Never rename them.
+    goalsSeeThrough = 0,
+    goalSpotsSeeThrough = 0,
+    rankUpSeeThrough = 0,
+    recapSeeThrough = 0,
+    xpBarSeeThrough = 0,
     -- No longer read: the milestone emote went (2026-10-13). Kept so a
     -- saved value is never dropped.
     trackerAnnounce = true,
@@ -410,6 +445,14 @@ local DEFAULTS = {
     -- minimap. Each can be turned off on its own.
     markersWorld = true,
     markersMinimap = true,
+    -- A glow on the maps where you kill the most (Logic/Heat.lua, a test
+    -- feature, 2026-10-17). Off unless ticked. heatLevel is 1 to 3 (Some,
+    -- More, Most), heatMob "" for every mob. Never rename them, or killHeat,
+    -- the cells kept.
+    heatWorld = false,
+    heatMinimap = false,
+    heatLevel = 2,
+    heatMob = "",
     -- Gold sparkles over the herb or ore node you face (UI/NodeSparkle.lua;
     -- the owner asked 2026-10-13). Never rename it, or nodeSparkleCVars,
     -- the game settings it turned on, kept to put back.
@@ -418,6 +461,11 @@ local DEFAULTS = {
     -- The game's interact icon kept out of sight without a controller (the
     -- owner asked 2026-10-13). Never rename it.
     nodeSparkleHideIcon = true,
+    -- Sparkles take the colour of what they are on, herbs and ore by your
+    -- skill (the owner, 2026-10-24), and a skinnable corpse can sparkle,
+    -- off until ticked. Never rename either.
+    nodeSparkleColors = true,
+    nodeSparkleCorpses = false,
 
     -- The best place to farm a material, on its tooltip.
     itemTooltip = true,
@@ -436,6 +484,7 @@ local DEFAULTS = {
     -- 2026-10-15). Never rename either.
     killPlates = true,
     killPlatesWorth = false,
+    killPlatesSide = "left",
     -- Skinning spots and leather left out of what Farmer lists, drops only
     -- (DB:ShowsSkinning). The owner asked for it on by default.
     hideSkinning = true,
@@ -448,6 +497,10 @@ local DEFAULTS = {
     -- A note on screen each time a clam or sack is opened and counted
     -- (UI/OpenNote.lua, the owner asked 2026-10-15). Never rename it.
     openNote = true,
+    -- The loot feed (UI/LootFeed.lua): off until ticked.
+    lootFeed = false,
+    lootFeedWorth = true,
+    lootFeedSeeThrough = 1,
     -- The Open button on the Kills & Loot panel, and opening clams, sacks
     -- and lockboxes by itself after loot once the test found it may (off
     -- unless ticked; UI/OpenButton.lua, the owner asked 2026-10-15). What
@@ -492,6 +545,9 @@ local DEFAULTS = {
     -- The same with guildmates who use Farmer (Logic/GuildShare.lua, asked
     -- 2026-10-13): off until ticked. Their ledgers are in shareIn too.
     shareGuild = false,
+    -- Drop records sent to the addon's maker for the shipped data
+    -- (Logic/Contribute.lua, asked 2026-10-15): off until ticked.
+    shareDrops = false,
 }
 
 local function LoadSavedVariables()
@@ -559,6 +615,26 @@ local function ShowHelp()
 end
 
 ns.RegisterCommand("help", L["show this list"], ShowHelp)
+
+--- Typed only and left out of help (the owner, 2026-10-23): checks and debug
+--- are for tracking down a problem, not for players. Set straight in
+--- ns.commands, so help and Settings never list it.
+function ns.RegisterHiddenCommand(name, fn)
+    ns.commands[name] = { fn = fn, hidden = true }
+end
+
+ns.RegisterHiddenCommand("debug", function(rest)
+    if not ns.db then return end
+    local word = (rest or ""):lower():match("^%s*(%S*)")
+    if word == "on" then
+        ns.db.debug = true
+    elseif word == "off" then
+        ns.db.debug = false
+    else
+        ns.db.debug = not ns.db.debug
+    end
+    ns.Print(ns.db.debug and "debug on" or "debug off")
+end)
 
 SLASH_BLACKTHORNESFARMER1 = "/farm"
 SLASH_BLACKTHORNESFARMER2 = "/farmer"

@@ -102,6 +102,29 @@ function GoalsUI.CountText(have, target)
     return ("%s|c%s / %d|r"):format(tostring(math.floor(have + 0.5)), ns.COLORS.muted, target)
 end
 
+-- The kill goal's icon (Logic/KillGoal.lua): a sword.
+local KILL_ICON = "Interface\\Icons\\INV_Sword_04"
+
+local function IsKill(goal)
+    return ns.KillGoal ~= nil and ns.KillGoal:Is(goal)
+end
+
+--- What a card is called: the item, or the kill goal's "Kill 1000 Mobs".
+local function NameOf(goal)
+    if IsKill(goal) then return ns.KillGoal.Title(goal) end
+    return goal.item
+end
+
+--- Every card on this character's panel: the kill goal first, then the
+--- item goals in the order they were set.
+function GoalsUI:List()
+    local list = {}
+    local kill = ns.KillGoal and ns.KillGoal:Current()
+    if kill then list[1] = kill end
+    for _, goal in ipairs(ns.Goals:List()) do list[#list + 1] = goal end
+    return list
+end
+
 local function IconOf(name)
     local look = ns.Tracker and ns.Tracker:LookOf(name) or {}
     if look.icon then return look.icon end
@@ -242,7 +265,7 @@ function GoalsUI:Build()
 
     -- Solid enough that name plates and chat behind it do not show through
     -- the text (a screenshot, 2026-09-27).
-    Theme.Fill(frame, "window", 0.96)
+    local back = Theme.Fill(frame, "window", 0.96)
     Theme.Border(frame, "border")
     -- The house's neon edge, as the other windows have.
     Theme.Halo(frame, 8, HALO_REST)
@@ -284,13 +307,17 @@ function GoalsUI:Build()
     footer:SetPoint("BOTTOMLEFT", 1, 1)
     footer:SetPoint("BOTTOMRIGHT", -1, 1)
     footer:SetHeight(FOOTER)
-    Theme.Fill(footer, "header", 0.9)
+    local footerBack = Theme.Fill(footer, "header", 0.9)
 
     footer.left = Theme.CreateLabel(footer, "small", "muted")
     footer.left:SetPoint("LEFT", PADDING, 0)
 
     footer.next = Widgets.CreateButton(footer, L["Set another"], function()
-        if ns.UI then
+        -- The New Goal box: Item opens the search, as this did before;
+        -- Kills sets a kill goal (UI/KillGoal.lua).
+        if ns.KillGoalUI then
+            ns.KillGoalUI:ShowNew()
+        elseif ns.UI then
             ns.UI:Show()
             -- The search box is on the Search tab: focused while the window
             -- shows Rankings, it would take your keys out of sight.
@@ -326,6 +353,13 @@ function GoalsUI:Build()
         end,
     })
 
+    -- See-through (UI/SeeThrough.lua, `goalsSeeThrough`).
+    local SeeThrough = ns.SeeThrough
+    SeeThrough:AddGlass("goals", back)
+    SeeThrough:AddGlass("goals", header.background)
+    SeeThrough:AddGlass("goals", footerBack)
+    SeeThrough:Attach("goals", frame)
+
     self:RestorePosition()
     frame:Hide()
     return frame
@@ -349,6 +383,8 @@ function GoalsUI:Card(index)
     card.rule:SetPoint("BOTTOMRIGHT")
     card.rule:SetHeight(1)
     card.rule:SetColorTexture(Theme.Unpack("border", 0.6))
+    ns.SeeThrough:AddGlass("goals", card.band)
+    ns.SeeThrough:AddGlass("goals", card.rule)
 
     -- Under the mouse the card lifts, a lighter wash and a lit edge easing
     -- in, so it reads as something to click. Both start clear.
@@ -508,6 +544,7 @@ function GoalsUI:Card(index)
     end)
     card:SetScript("OnClick", function(self, button) GoalsUI:OnCardClick(self, button) end)
 
+    ns.SeeThrough:Grew("goals", card)
     self.cards[index] = card
     return card
 end
@@ -588,10 +625,11 @@ function GoalsUI:DrawCard(card, goal)
     local Goals = ns.Goals
     card.goal = goal
 
-    card.icon:SetTexture(IconOf(goal.item))
+    local kill = IsKill(goal)
+    card.icon:SetTexture(kill and KILL_ICON or IconOf(goal.item))
 
     -- The name in its quality colour where the tracker has seen it.
-    local look = ns.Tracker and ns.Tracker:LookOf(goal.item) or {}
+    local look = (not kill and ns.Tracker and ns.Tracker:LookOf(goal.item)) or {}
     -- The name stops short of the count and the milestone tag, both
     -- measured: a width picked by eye let a long name run into "23 / 40".
     local countText = GoalsUI.CountText(goal.have or 0, goal.target or 0)
@@ -601,7 +639,7 @@ function GoalsUI:DrawCard(card, goal)
     if tagText then maxName = maxName - Theme.TextWidth("tiny", tagText) - 16 end
     -- Past the panel's widest, a long name steps down a size or two, and
     -- at the smallest wraps onto a second line: never cut to "...".
-    local name = goal.item
+    local name = NameOf(goal)
     local size = GoalsUI.NameSize(name, maxName)
     pcall(card.name.SetFont, card.name, Theme.FONT, Theme.sizes[size], "")
     local wraps = Theme.TextWidth(size, name) > maxName
@@ -609,8 +647,13 @@ function GoalsUI:DrawCard(card, goal)
     card.name:SetWordWrap(wraps)
     if card.name.SetMaxLines then pcall(card.name.SetMaxLines, card.name, wraps and 2 or 0) end
     card.name:SetText(name)
-    if type(look.color) == "string" and #look.color == 8 and look.color ~= "ffffffff" then
+    if kill then
+        card.name:SetText(Util.Colored("text", name))
+    elseif type(look.color) == "string" and #look.color == 8 then
         card.name:SetText(("|c%s%s|r"):format(look.color, name))
+    else
+        -- No loot link kept its colour: the item's rarity from the client.
+        card.name:SetText(Util.ColorItem(name))
     end
 
     local fraction = Goals.Fraction(goal)
@@ -640,17 +683,19 @@ function GoalsUI:DrawCard(card, goal)
     end
 
     self:SetBar(card, fraction, final or goal.done)
-    card.where:SetShown(not goal.done)
+    card.where:SetShown(not goal.done and not kill)
 
     card.right:ClearAllPoints()
-    if goal.done then
+    if goal.done or kill then
         card.right:SetPoint("TOPRIGHT", card.track, "BOTTOMRIGHT", 0, -5)
     else
         card.right:SetPoint("RIGHT", card.where, "LEFT", -6, 0)
     end
     card.sub:SetWidth(self:BarWidth() - ICON - 8)
 
-    if goal.done then
+    if kill then
+        self:DrawKillLines(card, goal, final)
+    elseif goal.done then
         local recap = Goals:Recap(goal)
         card.sub:SetText(Util.Colored("good", L["Goal done"]) .. (goal.doneIn and goal.doneIn >= 1
             and Util.Colored("muted", L.Format("  in %s", Goals.Duration(goal.doneIn))) or ""))
@@ -684,6 +729,34 @@ function GoalsUI:DrawCard(card, goal)
     card:Show()
 end
 
+--- The kill goal's lines under its bar (Logic/KillGoal.lua): how far
+--- along, how many to go and the time left at your pace; once done, the
+--- time it took, its gold and a click for the summary.
+function GoalsUI:DrawKillLines(card, goal, final)
+    local KillGoal = ns.KillGoal
+    if goal.done then
+        local last = KillGoal:Last()
+        local seconds = last and last.seconds or goal.seconds
+        card.sub:SetText(Util.Colored("good", L["Goal done"]) .. ((tonumber(seconds) or 0) >= 1
+            and Util.Colored("muted", L.Format("  in %s", ns.Goals.Duration(seconds))) or ""))
+        card.left:SetText(L["Click to see the summary."])
+        card.left:SetTextColor(Theme.Unpack("muted"))
+        card.right:SetText(last and last.gold and last.gold > 0 and ns.Value.Coins(last.gold) or "")
+        return
+    end
+
+    card.sub:SetText(Util.Colored("muted", L.Format("%d%%", math.floor(ns.Goals.Fraction(goal) * 100))))
+    local left = ns.Goals.Left(goal)
+    if final then
+        card.left:SetText(left == 1 and L["1 more!"] or L.Format("%d more!", left))
+        card.left:SetTextColor(Theme.Unpack("good"))
+    else
+        card.left:SetText(L.Format("%d to go", left))
+        card.left:SetTextColor(Theme.Unpack("muted"))
+    end
+    card.right:SetText(KillGoal.EtaText(goal) or "")
+end
+
 --- How wide a card has to be for none of its text to be cut off or run
 --- into something else. Measured, since the game's font runs wider than
 --- any width picked by eye.
@@ -693,7 +766,7 @@ function GoalsUI:CardNeeds(card, goal)
     -- less, the panel widened for a name and DrawCard still cut it.
     local count = Theme.TextWidth("large", text(card.count:GetText())) + 10
 
-    local top = PADDING + ICON + 8 + Theme.TextWidth("normal", goal.item) + count + PADDING
+    local top = PADDING + ICON + 8 + Theme.TextWidth("normal", NameOf(goal)) + count + PADDING
     if card.tag:IsShown() then top = top + Theme.TextWidth("tiny", card.tag:GetText()) + 16 end
 
     local sub = PADDING + ICON + 8 + Theme.TextWidth("tiny", text(card.sub:GetText())) + PADDING
@@ -708,7 +781,7 @@ end
 function GoalsUI:Render()
     self:Build()
 
-    local list = ns.Goals:List()
+    local list = self:List()
     local width = self:Width()
     -- The width it started from, so the kills panel can tell when it has
     -- changed and a redraw is due.
@@ -763,12 +836,31 @@ function GoalsUI:Render()
     self.frame:SetHeight(HEADER + GAP + #list * (CARD + 2) + (footer and FOOTER or 0))
 end
 
+--- An item's rarity came in late (Util.OnRarity): the cards and the
+--- titles naming it take its colour. Only what is up is drawn.
+function GoalsUI:RarityArrived()
+    if self.frame and self.frame:IsShown() then self:Render() end
+    local spots = self.spots
+    if spots and spots:IsShown() and self.spotsItem then
+        spots.title:SetText(L.Format("Where to farm |c%s%s|r", Util.ItemHexOr("text", self.spotsItem),
+            self.spotsItem))
+    end
+    local picker = self.picker
+    local item = GoalsUI.pickItem
+    if picker and picker:IsShown() and item then
+        picker.title:SetText(L.Format("GATHERING GOAL  |c%s%s|r", Util.ItemHexOr("text", item),
+            (item:upper():gsub("ä", "Ä"):gsub("ö", "Ö"):gsub("ü", "Ü"))))
+    end
+end
+
+Util.OnRarity("goals", function() GoalsUI:RarityArrived() end)
+
 --- Redraw, and show or hide: shown while there are goals, unless you
 --- closed it.
 function GoalsUI:Refresh()
     self:Build()
 
-    if #ns.Goals:List() == 0 or ns.db.goalsHidden then
+    if #self:List() == 0 or ns.db.goalsHidden then
         self.frame:Hide()
         self:Forget()
         return
@@ -802,7 +894,7 @@ end
 -- `/farm goals` and a middle-click on the minimap button: with no goals
 -- there is no panel to show, so say how to make one.
 function GoalsUI:ToggleOrHint()
-    if #ns.Goals:List() == 0 then
+    if #self:List() == 0 then
         ns.Print(L["no goals yet. /farm goal Copper Ore 40, or the Goal button on a search result."])
         return
     end
@@ -822,7 +914,18 @@ function GoalsUI:ShowCardTooltip(card)
     if not (goal and GameTooltip) then return end
 
     GameTooltip:SetOwner(card, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(goal.item)
+    if IsKill(goal) then
+        GameTooltip:AddLine(NameOf(goal))
+        GameTooltip:AddLine(L.Format("%d of %d", goal.have or 0, goal.target or 0), 1, 1, 1)
+        if goal.done then
+            GameTooltip:AddLine(L["Click to see the summary."], 0.6, 0.6, 0.6)
+        else
+            GameTooltip:AddLine(L["Right-click to remove the goal."], 0.6, 0.6, 0.6)
+        end
+        GameTooltip:Show()
+        return
+    end
+    GameTooltip:AddLine(Util.ColorItem(goal.item))
     GameTooltip:AddLine(L.Format("%d of %d", goal.have or 0, goal.target or 0), 1, 1, 1)
     if goal.done then
         GameTooltip:AddLine(L["Click to clear it."], 0.6, 0.6, 0.6)
@@ -838,6 +941,16 @@ function GoalsUI:OnCardClick(card, button)
     local goal = card.goal
     if not goal then return end
 
+    if IsKill(goal) then
+        if goal.done then
+            if ns.KillGoalUI then ns.KillGoalUI:ShowSummary() end
+        elseif button == "RightButton" then
+            ns.KillGoal:Stop()
+            ns.Print(L.Format("goal for %s removed.", Util.Colored("accent", NameOf(goal))))
+        end
+        return
+    end
+
     if goal.done then
         ns.Goals:Remove(goal.item)
         return
@@ -850,7 +963,7 @@ function GoalsUI:OnCardClick(card, button)
 
     if button == "RightButton" then
         ns.Goals:Remove(goal.item)
-        ns.Print(L.Format("goal for %s removed.", Util.Colored("accent", goal.item)))
+        ns.Print(L.Format("goal for %s removed.", Util.ColorItemOr("accent", goal.item)))
         return
     end
 
@@ -1066,9 +1179,12 @@ function GoalsUI:Complete(goal)
 
     -- How long it took, where the banner has room for it (the chat line
     -- says it too): measured, as it ran off a panel at its usual width.
-    local subject = ("%d / %d %s"):format(goal.have or 0, goal.target or 0, goal.item)
-    if (tonumber(goal.doneIn) or 0) >= 1 then
-        local took = subject .. "  |  " .. ns.Goals.Duration(goal.doneIn)
+    local kill = IsKill(goal)
+    local subject = kill and ("%d / %d"):format(goal.have or 0, goal.target or 0)
+        or ("%d / %d %s"):format(goal.have or 0, goal.target or 0, Util.ColorItem(goal.item))
+    local spent = kill and goal.seconds or goal.doneIn
+    if (tonumber(spent) or 0) >= 1 then
+        local took = subject .. "  |  " .. ns.Goals.Duration(spent)
         if Theme.TextWidth("small", took) <= width - 12 then subject = took end
     end
     banner.subject:SetText(subject)
@@ -1203,7 +1319,7 @@ function GoalsUI:Play(change, level, floats)
     end
 
     if full and change.gathered then
-        self:Float(card, ("+%d %s"):format(change.gathered, goal.item), 13, floats * 0.18)
+        self:Float(card, ("+%d %s"):format(change.gathered, change.name or NameOf(goal)), 13, floats * 0.18)
         if change.milestone then
             self:Float(card, Util.Colored("accent", change.milestone.at == 0.50
                 and L["Halfway there!"] or (change.milestone.tag .. "!")), 16, floats * 0.18 + 0.35)
@@ -1351,7 +1467,7 @@ function GoalsUI:BuildSpots()
     panel:SetClampedToScreen(true)
     panel:EnableMouse(true)
 
-    Theme.Fill(panel, "window", 0.96)
+    local back = Theme.Fill(panel, "window", 0.96)
     -- The house frame's rim and corner gems, and its red close gem
     -- (UI/Titanforged.lua). Its own title stays inside: it names the item
     -- in two colours and the panel is sized to it.
@@ -1410,6 +1526,10 @@ function GoalsUI:BuildSpots()
         table.insert(UISpecialFrames, "BlackthornesFarmerGoalSpots")
     end
 
+    -- See-through (UI/SeeThrough.lua, `goalSpotsSeeThrough`).
+    ns.SeeThrough:AddGlass("places", back)
+    ns.SeeThrough:Attach("places", panel)
+
     panel:Hide()
     self.spots = panel
     return panel
@@ -1432,6 +1552,8 @@ function GoalsUI:SpotRow(index)
     row.rule:SetPoint("BOTTOMRIGHT")
     row.rule:SetHeight(1)
     row.rule:SetColorTexture(Theme.Unpack("border", 0.6))
+    ns.SeeThrough:AddGlass("places", row.band)
+    ns.SeeThrough:AddGlass("places", row.rule)
     -- The light the lists' rows wear under the mouse. The wash here was
     -- filled clear, so no alpha could ever show it.
     Widgets.RowLight(row)
@@ -1485,6 +1607,7 @@ function GoalsUI:SpotRow(index)
             stop = function() self.flash:SetAlpha(0) end })
     end)
 
+    ns.SeeThrough:Grew("places", row)
     panel.rows[index] = row
     return row
 end
@@ -1502,7 +1625,7 @@ function GoalsUI:OpenSpots(item, anchor)
 
     local spots, player = ns.Spots:For(item)
 
-    panel.title:SetText(L.Format("Where to farm |c%s%s|r", ns.COLORS.text, item))
+    panel.title:SetText(L.Format("Where to farm |c%s%s|r", Util.ItemHexOr("text", item), item))
     if player.zone and player.level then
         panel.from:SetText(L.Format("Nearest first, from %s at level %d", ns.Spots.Show(player.zone), player.level))
     elseif player.zone then
@@ -1516,7 +1639,12 @@ function GoalsUI:OpenSpots(item, anchor)
         row.spot = spot
 
         row.rank:SetText(tostring(index))
-        row.name:SetText(spot.name or "?")
+        -- A clam or sack you opened is an item, in its rarity colour.
+        if spot.kind == "container" and spot.yours and spot.yours.container and spot.name then
+            row.name:SetText(Util.ColorItem(spot.name))
+        else
+            row.name:SetText(spot.name or "?")
+        end
 
         -- Coloured the way the search window colours a level: red well above
         -- you, yellow around you, green and then grey below.
@@ -1696,7 +1824,7 @@ function GoalsUI:BuildPicker()
 
     local remove = Widgets.CreateButton(picker, L["Remove goal"], function()
         ns.Goals:Remove(GoalsUI.pickItem)
-        ns.Print(L.Format("goal for %s removed.", Util.Colored("accent", GoalsUI.pickItem)))
+        ns.Print(L.Format("goal for %s removed.", Util.ColorItemOr("accent", GoalsUI.pickItem)))
         picker:Hide()
         GoalsUI:RedrawSearch()
     end, { width = 80, height = 22 })
@@ -1735,7 +1863,7 @@ function GoalsUI:FillPicker()
     local goal = ns.Goals:Find(item)
     local have = ns.Goals:Have(item) or 0
 
-    picker.title:SetText(L.Format("GATHERING GOAL  |c%s%s|r", ns.COLORS.text,
+    picker.title:SetText(L.Format("GATHERING GOAL  |c%s%s|r", Util.ItemHexOr("text", item),
         (item:upper():gsub("ä", "Ä"):gsub("ö", "Ö"):gsub("ü", "Ü"))))
     picker.have:SetText(L.Format("You have |c%s%d|r %s.", ns.COLORS.text, have,
         ns.Goals:CountsBank() and L["in your bags and bank"] or L["in your bags"]))
@@ -1889,7 +2017,7 @@ function GoalsUI:PickerSet()
 
     picker:Hide()
     ns.Print(L.Format("goal set: %s %s. You have %d, %d to go.",
-        Util.Colored("good", tostring(goal.target)), Util.Colored("accent", goal.item),
+        Util.Colored("good", tostring(goal.target)), Util.ColorItemOr("accent", goal.item),
         goal.have, ns.Goals.Left(goal)))
     self:Show()
     GoalsUI:RedrawSearch()

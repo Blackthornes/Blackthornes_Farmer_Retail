@@ -45,6 +45,53 @@ local TAB_INSET = 34
 -- The Rankings tab never draws the window narrower than this either.
 UI.BASE_WIDTH = WIDTH
 
+-- Every tab shares one size (the owner, 2026-10-17: the window kept
+-- changing width from tab to tab). It is as wide as the widest tab has
+-- needed, never narrower than the Grind and Stats tabs' own layouts, and
+-- every tab spreads its columns over the room. The widest is kept in
+-- `windowWidth` (account wide, never rename it), so it is the same size
+-- from the first look next time; Reset window positions lets it go.
+-- Most it keeps, so one odd search can't leave the window huge for good.
+UI.WIDEST_KEPT = 1600
+
+--- The width every tab draws at: the widest any has needed, at least the
+--- Grind and Stats layouts, never wider than the screen.
+function UI:WindowWidth()
+    local width = math.max(WIDTH, ns.GrindingUI and ns.GrindingUI.WIDTH or 0,
+        ns.StatsUI and ns.StatsUI.WIDTH or 0, self.widest or 0,
+        tonumber(ns.db and ns.db.windowWidth) or 0)
+    width = math.min(width, UI.WIDEST_KEPT)
+    local room = self.ScreenRoom and self:ScreenRoom()
+    if room then width = math.max(WIDTH, math.min(width, room)) end
+    return math.ceil(width)
+end
+
+--- The height every tab draws at: the Stats tab's charts want the most.
+function UI:WindowHeight()
+    return math.max(HEIGHT, ns.StatsUI and ns.StatsUI.HEIGHT or 0)
+end
+
+--- A tab needs this much room: the shared width grows to it (and is kept)
+--- if it is more. Returns the shared width, which the tab fills.
+function UI:Claim(width)
+    width = tonumber(width)
+    if width and width > (self.widest or 0) then
+        self.widest = math.min(math.ceil(width), UI.WIDEST_KEPT)
+        if ns.db and self.widest > (tonumber(ns.db.windowWidth) or 0) then
+            ns.db.windowWidth = self.widest
+        end
+    end
+    return self:WindowWidth()
+end
+
+--- Size the window to the shared width and height.
+function UI:ApplySize()
+    if not self.frame then return end
+    local width, height = self:WindowWidth(), self:WindowHeight()
+    if self.frame:GetWidth() ~= width then self.frame:SetWidth(width) end
+    if self.frame:GetHeight() ~= height then self.frame:SetHeight(height) end
+end
+
 -- The window's tabs, left to right.
 local TABS = {
     { key = "search", text = L["SEARCH"] },
@@ -58,8 +105,11 @@ local TABS = {
 -- the game's font runs wider than widths picked by eye, and names were being
 -- cut off. The last slot holds the [Forever] badge, as wide as its text when
 -- a row has one, so a long "needs" in the drop column never runs under it.
-local COLUMN_ORDER = { "kind", "name", "where", "level", "drop", "value", "badge" }
-local BASE_WIDTH = { kind = 40, name = 170, where = 196, level = 46, drop = 110, value = 58, badge = 8 }
+-- The map slot holds a mob's Map button (Show on Map), only while the kill
+-- heat map is on the world map; otherwise it takes no room at all.
+local COLUMN_ORDER = { "kind", "name", "where", "level", "drop", "value", "badge", "map" }
+local BASE_WIDTH = { kind = 40, name = 170, where = 196, level = 46, drop = 110, value = 58, badge = 8, map = 0 }
+local MAP_BUTTON_WIDTH = 40
 -- Where has room for the longest place in the data (a zone, a landmark and
 -- coordinates) in the game's font; at 400 it cut 47 of them off.
 local MAX_WIDTH = { name = 320, where = 520, drop = 220, value = 140 }
@@ -95,7 +145,7 @@ local function Columns(widths)
     for _, key in ipairs(COLUMN_ORDER) do
         local w = widths and widths[key] or BASE_WIDTH[key]
         columns[key] = { x = x, w = w }
-        x = x + w + COLUMN_GAP
+        if w > 0 then x = x + w + COLUMN_GAP end
     end
 
     -- How much wider than the narrowest layout, for the window to grow by.
@@ -169,7 +219,7 @@ function UI:Build()
     self.collapsed = {}
 
     local frame = CreateFrame("Frame", "BlackthornesFarmerFrame", UIParent)
-    frame:SetSize(WIDTH, HEIGHT)
+    frame:SetSize(self:WindowWidth(), self:WindowHeight())
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -203,6 +253,15 @@ function UI:Build()
     -- The house's neon edge: a soft gold glow round the window that flares
     -- as it opens and settles.
     Theme.Halo(frame, 12, HALO_REST)
+
+    -- The fold gem beside the close gem folds the window down to its plate
+    -- (UI/FoldWindow.lua, a player asked, 2026-10-24).
+    if ns.FoldWindow then
+        ns.FoldWindow:Add(frame, { onToggle = function(folded)
+            if ns.GoalsUI then ns.GoalsUI:CheckPicker() end
+            if not folded then UI:Refresh() end
+        end })
+    end
 
     frame:SetScript("OnDragStart", function(self)
         -- Land an opening still running, or it would pull the window back.
@@ -550,7 +609,7 @@ end
 --- than the base layout.
 function UI:FitColumns(rows)
     local widths = { kind = BASE_WIDTH.kind, name = BASE_WIDTH.name, where = BASE_WIDTH.where,
-        drop = BASE_WIDTH.drop, value = BASE_WIDTH.value, badge = BASE_WIDTH.badge }
+        drop = BASE_WIDTH.drop, value = BASE_WIDTH.value, badge = BASE_WIDTH.badge, map = 0 }
     local note = 0
 
     for _, row in ipairs(rows) do
@@ -572,6 +631,7 @@ function UI:FitColumns(rows)
             if row.source.provenance == "forever" then
                 widths.badge = math.max(widths.badge, Theme.TextWidth("tiny", BADGE_TEXT))
             end
+            if UI.MapsMob(row.source) then widths.map = MAP_BUTTON_WIDTH end
         elseif row.type == "zone" then
             -- A zone's heading takes the where column's room and more; it
             -- only needs not to run past the row.
@@ -609,19 +669,28 @@ function UI:FitColumns(rows)
         end
     end
 
+    -- Every tab shares one width: the room past what the columns need goes
+    -- to the source and where columns, so nothing sits empty at the right.
+    local shared = self:Claim(WIDTH + Columns(widths).extra)
+    local spare = shared - (WIDTH + Columns(widths).extra)
+    if spare > 0 then
+        local half = math.floor(spare / 2)
+        widths.name = widths.name + half
+        widths.where = widths.where + (spare - half)
+    end
+
     local current = self.columns or COLUMN
     if current.kind.w == widths.kind and current.name.w == widths.name and current.where.w == widths.where
         and current.drop.w == widths.drop and current.value.w == widths.value
-        and current.badge.w == widths.badge then
+        and current.badge.w == widths.badge and current.map.w == widths.map then
         return
     end
 
     self.columns = Columns(widths)
     self:PlaceHeadings()
 
-    -- Only the search tab's own width: the others size the window themselves.
     if self.tab ~= "rankings" and self.tab ~= "grind" and self.tab ~= "stats" then
-        self.frame:SetWidth(WIDTH + self.columns.extra)
+        self:ApplySize()
     end
 end
 
@@ -706,25 +775,37 @@ function UI:ShowValueTooltip(row)
         return
     end
 
-    self:ShowMobTooltip(row, data.source.name)
+    -- A mob killed in more than one zone: this row's zone's line.
+    local key = data.source.name
+    if ns.Tracker then key = ns.Tracker:KeyFor(key, data.source.zone) end
+    self:ShowMobTooltip(row, key)
 end
 
 --- What a kill of `mobName` is worth and what makes it up, beside `owner`.
 --- Shows nothing for a mob with no value.
-function UI:ShowMobTooltip(owner, mobName)
+--- `colored` names the drops in their rarity colour (Rankings and Grind);
+--- the search window keeps its own look (the owner, 2026-10-18).
+--- `entry`, when given, is a Rankings entry whose worth (one with Uncommon
+--- and better drops left out, say) is shown instead of the mob's own.
+function UI:ShowMobTooltip(owner, mobName, colored, entry)
     if not (GameTooltip and ns.Value) then return end
 
-    local worth, details = ns.Value:ForMob(mobName)
+    local worth, details
+    if entry and entry.value and entry.details then
+        worth, details = entry.value, entry.details
+    else
+        worth, details = ns.Value:ForMob(mobName)
+    end
     if not worth then return end
 
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(mobName)
+    GameTooltip:AddLine(ns.Tracker and ns.Tracker.ShowKey(mobName) or mobName)
     GameTooltip:AddLine(L.Format("Worth about %s a kill", ns.Value.Coins(worth)),
         Theme.Unpack("good"))
 
     for index = 1, math.min(#details.priced, 4) do
         local entry = details.priced[index]
-        GameTooltip:AddLine(("  %s  %s"):format(entry.name, ns.Value.Coins(entry.perKill)),
+        GameTooltip:AddLine(("  %s  %s"):format(colored and Util.ColorItem(entry.name, entry.id) or entry.name, ns.Value.Coins(entry.perKill)),
             Theme.Unpack("muted"))
     end
 
@@ -786,6 +867,28 @@ function UI:CreateRow(row)
     row.goal:SetPoint("RIGHT", -2, 0)
     row.goal:Hide()
 
+    -- Show on Map: the kill heat map's glow for this mob or item.
+    row.map = Widgets.CreateButton(row, L["Map"], function()
+        local kind, name = UI.MapTarget(row.data)
+        if not (kind and ns.Heat) then return end
+        if not UI.MapHasSpots(kind, name) then return end
+        ns.Heat:ShowOnMap(kind, name)
+        UI:Render()
+    end, { width = MAP_BUTTON_WIDTH, height = 15 })
+    row.map:HookScript("OnEnter", function(self)
+        local kind, name = UI.MapTarget(row.data)
+        if not (kind and GameTooltip) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(UI.MapHasSpots(kind, name)
+            and L["Show where you find this on your map."]
+            or L["Kill a few first and it will show here."], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    row.map:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    row.map:Hide()
+
     row.kindChip = row:CreateTexture(nil, "ARTWORK")
     row.kindChip:SetSize(BASE_WIDTH.kind - 6, 13)
 
@@ -820,6 +923,45 @@ function UI:CreateRow(row)
     self:PlaceRow(row)
 end
 
+--- Does a search row's source get a Map button? Mobs only, while the heat
+--- map is on the world map.
+function UI.MapsMob(source)
+    return ns.Heat ~= nil and ns.Heat.WorldOn() and type(source) == "table"
+        and type(source.name) == "string" and (source.kind or "mob") == "mob"
+end
+
+--- What a row's Map button shows: "mob" or "item", and its name.
+function UI.MapTarget(data)
+    if type(data) ~= "table" then return nil end
+    if data.type == "source" and UI.MapsMob(data.source) then return "mob", data.source.name end
+    if data.type == "item" and data.item and not data.item.worldDrops
+        and ns.Heat and ns.Heat.WorldOn() then
+        return "item", data.item.name
+    end
+    return nil
+end
+
+--- Is there any glow to show for it yet?
+function UI.MapHasSpots(kind, name)
+    if not ns.Heat then return false end
+    if kind == "item" then return ns.Heat:ItemHasSpots(name) end
+    return ns.Heat:HasSpots(name)
+end
+
+--- Light the button gold while it is what the map shows; dim with no spots.
+local function DressMapButton(row, kind, name)
+    local Heat = ns.Heat
+    local current = (kind == "item" and Heat:Item() == name) or (kind == "mob" and Heat:Mob() == name)
+    if current then
+        row.map:SetLabelColor("accent")
+    elseif not UI.MapHasSpots(kind, name) then
+        row.map:SetLabelColor("dim")
+    else
+        row.map:SetLabelColor(nil)
+    end
+    row.map:Show()
+end
+
 local function HideSourceColumns(row)
     row.kindChip:Hide()
     row.kindEdge:Hide()
@@ -846,6 +988,7 @@ function UI:UpdateRow(row, data, index)
     self:PlaceRow(row)
     row.heading:Hide()
     row.goal:Hide()
+    row.map:Hide()
     row.band:Hide()
     row.bandGlow:Hide()
     row.bandStripe:Hide()
@@ -871,10 +1014,25 @@ function UI:UpdateRow(row, data, index)
                 data.item.category, ns.Search:SpotsText(data.count, #data.item.sources)))))
         row.heading:Show()
 
+        -- Show on Map sits left of Goal, or at the end with no Goal.
+        local mapKind, mapName = UI.MapTarget(data)
+        local hasGoal = not (data.item.worldDrops or data.item.found)
+        if mapKind then
+            row.map:ClearAllPoints()
+            if hasGoal then
+                row.map:SetPoint("RIGHT", row.goal, "LEFT", -4, 0)
+            else
+                row.map:SetPoint("RIGHT", -2, 0)
+            end
+            DressMapButton(row, mapKind, mapName)
+            PlaceHeading(row, data.item.id and 38 or 18,
+                (hasGoal and 64 or 22) + MAP_BUTTON_WIDTH + 4)
+        end
+
         -- "23/40" once it has a goal, so the list shows where you are.
         -- The world drops result is no item to gather toward, and a find
         -- the data does not know (Search:FoundItems) is no goal's item.
-        if data.item.worldDrops or data.item.found then return end
+        if not hasGoal then return end
 
         local goal = ns.Goals and ns.Goals:Find(data.item.name)
         if goal and not goal.done then
@@ -986,6 +1144,13 @@ function UI:UpdateRow(row, data, index)
     if source.provenance == "forever" then
         row.badge:SetText(BADGE_TEXT)
         row.badge:Show()
+    end
+
+    local mapKind, mapName = UI.MapTarget(data)
+    if mapKind and (self.columns or COLUMN).map.w > 0 then
+        row.map:ClearAllPoints()
+        row.map:SetPoint("LEFT", (self.columns or COLUMN).map.x, 0)
+        DressMapButton(row, mapKind, mapName)
     end
 end
 
@@ -1265,9 +1430,8 @@ function UI:ShowTab(key)
     if self.grindView then self.grindView:SetShown(key == "grind") end
     if self.statsView then self.statsView:SetShown(key == "stats") end
 
-    -- The Stats tab's charts want a taller window; every other tab has
-    -- the usual height.
-    if key ~= "stats" then self.frame:SetHeight(HEIGHT) end
+    -- One size for every tab.
+    self:ApplySize()
 
     if key == "rankings" then
         -- A hidden search box keeping the keyboard would eat your keys.
@@ -1278,11 +1442,8 @@ function UI:ShowTab(key)
         ns.GrindingUI:Render(true)
     elseif key == "stats" then
         self.searchBox:ClearFocus()
-        self.frame:SetWidth(ns.StatsUI.WIDTH)
-        self.frame:SetHeight(ns.StatsUI.HEIGHT)
         ns.StatsUI:Render(true)
     else
-        self.frame:SetWidth(WIDTH + (self.columns or COLUMN).extra)
         self:DrawUnsearched()
     end
 end
@@ -1361,7 +1522,11 @@ end
 function UI:Show()
     self:Build()
 
-    if self.frame:IsShown() then return end
+    -- Asked for again while folded: open it full.
+    if self.frame:IsShown() then
+        if ns.FoldWindow then ns.FoldWindow:Unfold(self.frame) end
+        return
+    end
 
     self:RestorePosition()
     self.frame:Show()
