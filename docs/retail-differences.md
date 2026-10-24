@@ -230,3 +230,19 @@ spots now arrive at a node's 12 yards, not a mob's 35.
 
 **Sync rule: Blend.** Forever changes to how the arrow lists or sorts places
 go on top of this; keep the checked spots.
+
+## 11. A hidden item hides its random suffixes
+
+`Data/Database.lua`: `DB:IsHiddenItem` also answers true for a suffix
+("Primal Leggings of the Monkey") whose item ("Primal Leggings") is on the
+hide list, through `Harvest.RollBase`. The lists name the item once, so
+that is the name a right-click hides, but the kill tally keeps each suffix
+under its own name, so `Value:FromTally` still counted a hidden green in
+worth per kill and the best drop (the owner, 2026-10-24: Webwood Lurker at
+88g a kill off one Primal Leggings he had hidden). Every reader goes
+through `DB:IsHiddenItem` or `DB:HidesItem`, so all of them follow.
+Nothing saved changes. Tests in `tools/test_suffixdrops.lua`. Forever has
+the same bug as of `16167e1`; not fixed there from here.
+
+**Sync rule: Keep Retail** for `DB:IsHiddenItem` unless Forever has fixed
+it the same way, then take Forever's.
