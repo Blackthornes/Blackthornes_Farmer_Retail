@@ -1638,6 +1638,22 @@ harvest check` also says whether the kill line in chat names the mob
 `tools/test_forever_npc_names.py`.
 `/farm harvest check` reports what a dungeon lets the addon read.
 
+## Area loot counts every corpse (Retail)
+
+The owner asked (2026-10-24): Retail loots every corpse in reach in one
+window, and Farmer counted only the one clicked as a kill (the rest went
+into the session's loot only). Now each other corpse the window names
+(`GetLootSourceInfo`) is a kill and a drop-rate corpse of its own, with
+only its own share of each slot and its own coin: `Harvest:OtherCorpses`
+(a creature not still alive, named by `NoteUnit`'s seen-alive table, else
+`KnownNpcName`; one with no name stays out, never a guess),
+`Harvest:SlotShare`, `Harvest:RecordOther` and `Tracker:OtherShare`, which
+takes its share out of the haul so the session counts the window once.
+Not for skinning windows. Each is marked opened (`Harvest.opened`,
+`Tracker.corpses`), so opening it later is no new kill. The one you clicked
+is recorded last and stays on top of the panel. Saved data is not
+rewritten. Tested in `tools/test_aoeloot.lua`. Not yet seen in game.
+
 ## What's New
 
 The owner asked (2026-10-12) for the Discord #general post to show in game,

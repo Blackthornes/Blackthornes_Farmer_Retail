@@ -1197,6 +1197,48 @@ function Tracker:LootedItems(anySource)
     return names, quantities, copper, haul
 end
 
+--- What the open window holds that the client says came off `guid`, another
+--- corpse of an area loot: its items, their amounts, its coin and how much of
+--- each is locked, the way LootedItems gives the corpse you opened. What it
+--- takes comes out of `haul`, the rest of the window that had no kill.
+--- A share the client will not let be read is one of the item and no coin.
+function Tracker:OtherShare(guid, haul)
+    local names, quantities, copper, locked = {}, {}, 0, {}
+
+    local gotCount, lootCount = pcall(GetNumLootItems)
+    local count = gotCount and ns.Harvest.ReadableNumber(lootCount) or nil
+
+    for slot = 1, count or 0 do
+        local share, here = ns.Harvest:SlotShare(slot, guid)
+        local ok, slotIcon, slotName, _, _, _, slotLocked
+        if here then ok, slotIcon, slotName, _, _, _, slotLocked = pcall(GetLootSlotInfo, slot) end
+        local text = here and ok and ns.Harvest.Readable(slotName) or nil
+
+        if text and ns.Harvest:IsMoney(slot, text) then
+            local own = share or 0
+            copper = copper + own
+            haul.copper = math.max(0, (tonumber(haul.copper) or 0) - own)
+        elseif text then
+            local own = share or 1
+            if not quantities[text] then
+                names[#names + 1] = text
+                quantities[text] = 0
+                self:NoteLook(slot, text, slotIcon)
+            end
+            quantities[text] = quantities[text] + own
+
+            if IsLocked(slotLocked) then
+                locked[text] = (locked[text] or 0) + own
+            elseif haul.items[text] then
+                local left = haul.items[text] - own
+                haul.items[text] = left > 0 and left or nil
+            end
+        end
+    end
+
+    return names, quantities, copper, locked
+end
+
 --- For each loot slot, how much of it belongs to corpses other than the one
 --- opened that this session already counted: opened, or shown in an earlier
 --- window's area loot. With full bags their leftovers come round again in
@@ -1259,6 +1301,19 @@ function Tracker:OnLoot()
     -- And kept by mob, for what a skin is worth on the Grind tab.
     if skinning and ns.GrindGather then ns.GrindGather:NoteSkin(mobName, guid, items, quantities) end
 
+    -- Area loot: every other corpse the window took that this session never
+    -- counted is a kill of its own, with its own share (OtherShare). Picked
+    -- before they are remembered below. Not a skinning window, which is one
+    -- corpse's.
+    local others = {}
+    if not skinning then
+        for _, other in ipairs(ns.Harvest:OtherCorpses(guid)) do
+            if not self.corpses[other.guid] and not self.areaLooted[other.guid] then
+                others[#others + 1] = other
+            end
+        end
+    end
+
     -- With area loot this window took the other corpses' drops too. Each of
     -- them is remembered, so skinning one later is not taken for a kill
     -- whose drops nobody counted (EmptyOwnKill).
@@ -1283,14 +1338,22 @@ function Tracker:OnLoot()
         end
     end
 
+    local place = Tracker.PlaceName(ns.Harvest:Where())
+
+    -- The other corpses first, so the one you opened stays on top of the
+    -- panel. What each takes comes out of the haul, so nothing counts twice.
+    for _, other in ipairs(others) do
+        local otherItems, otherQuantities, otherCopper, locked = self:OtherShare(other.guid, haul)
+        self:Record(other.name, other.guid, otherItems, otherQuantities, otherCopper, place,
+            { items = {}, copper = 0, locked = locked }, false)
+    end
+
     -- A corpse whose loot showed in another corpse's window (area loot) was
     -- counted there: its drops went into the session's loot, and it is no
     -- kill of its own. Full bags leave it holding what could not be taken,
     -- and opening it after other loot counted it again as a new kill with
     -- new drops (2026-10-13). Nothing it shows is new.
     if guid and not self.corpses[guid] and self.areaLooted[guid] then return false end
-
-    local place = Tracker.PlaceName(ns.Harvest:Where())
 
     return self:Record(mobName, guid, items, quantities, copper, place, haul, skinning)
 end

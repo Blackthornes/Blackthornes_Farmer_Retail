@@ -926,6 +926,46 @@ function Harvest:SlotIsTargets(slot)
     return not elsewhere
 end
 
+--- The other corpses an area loot window took, each its own kill: every
+--- mob the window names besides `guid` (the corpse you opened), each once,
+--- in the window's order, as { guid, name, level }. Only a mob with a name
+--- that is a fact, never a guess: the one this session saw it alive under
+--- (NoteUnit), else the one its ID was given before (KnownNpcName). One
+--- still alive (a pocket) and one with no name are left out, and stay
+--- someone else's share of the window as before.
+function Harvest:OtherCorpses(guid)
+    local list = {}
+    if not guid then return list end
+
+    for _, source in ipairs(self:LootSources()) do
+        local npcID = Harvest.NpcID(source)
+        if source ~= guid and npcID and not self:StillAlive(source) then
+            local known = self:KnownUnit(source)
+            local name = known and known.name or Harvest.KnownNpcName(npcID)
+            if name then
+                list[#list + 1] = { guid = source, name = name, level = known and known.level or nil }
+            end
+        end
+    end
+
+    return list
+end
+
+--- How much of loot slot `slot` the client says came off `guid`: the share
+--- (nil when it will not let it be read) and whether `guid` is in the slot
+--- at all.
+function Harvest:SlotShare(slot, guid)
+    if type(GetLootSourceInfo) ~= "function" or not guid then return nil, false end
+
+    local ok, sources = pcall(function() return { GetLootSourceInfo(slot) } end)
+    if not ok then return nil, false end
+
+    for index = 1, #sources, 2 do
+        if Readable(sources[index]) == guid then return ReadableNumber(sources[index + 1]), true end
+    end
+    return nil, false
+end
+
 --------------------------------------------------------------------------------
 -- Recording
 --------------------------------------------------------------------------------
@@ -1169,6 +1209,43 @@ function Harvest:NameLooksLikeMoney(name)
     return (name:gsub("%d+%s+%a+%s*", "")) == ""
 end
 
+--- One slot's item into a corpse's record. An item in two slots of one
+--- corpse is one corpse that held it, not two: `corpse.items` spans every
+--- opening of the corpse, `seenHere` only this one, so two slots of the same
+--- item now still add up, while leftovers seen again on a return visit add
+--- nothing.
+local function AddSlot(record, corpse, seenHere, slot, name, quantity, caps)
+    local counted = corpse.items
+    if counted[name] and not seenHere[name] then return end
+
+    local entry = record.items[name]
+
+    if not entry then
+        entry = { name = name, count = 0, corpses = 0 }
+        record.items[name] = entry
+    end
+
+    entry.count = entry.count + (ReadableNumber(quantity) or 1)
+    corpse.counts = corpse.counts or {}
+    corpse.counts[name] = (corpse.counts[name] or 0) + (ReadableNumber(quantity) or 1)
+
+    if not seenHere[name] then
+        seenHere[name] = true
+        counted[name] = true
+        entry.corpses = entry.corpses + 1
+    end
+
+    if not entry.id and caps.lootSlotLink then
+        local gotLink, link = pcall(GetLootSlotLink, slot)
+        -- The link comes from the same restricted source as the name,
+        -- so it is read the same way before anything matches on it.
+        local text = gotLink and Readable(link) or nil
+        if text then
+            entry.id = tonumber(text:match("item:(%d+)"))
+        end
+    end
+end
+
 --- One looted corpse: the denominator of every rate this module reports.
 function Harvest:RecordCorpse()
     if not self.enabled then return end
@@ -1213,6 +1290,17 @@ function Harvest:RecordCorpse()
     local corpse = guid and self.opened[guid]
     local record
 
+    -- Area loot: every other corpse the window took is its own corpse, with
+    -- its own share of the window (RecordOther). Not a skinning window,
+    -- which is one corpse's. Recorded first, so NoteShown passes them by.
+    if not (ns.Gathering ~= nil and ns.Gathering:IsSkinning()) then
+        for _, other in ipairs(self:OtherCorpses(guid)) do
+            if not self.opened[other.guid] and not self.shown[other.guid] then
+                self:RecordOther(other.guid, other.name, other.level)
+            end
+        end
+    end
+
     -- What else this window shows was looted with it, whichever way it goes.
     self:NoteShown(guid)
 
@@ -1245,11 +1333,6 @@ function Harvest:RecordCorpse()
         if guid then self.opened[guid] = corpse end
     end
 
-    -- An item in two slots of one corpse is one corpse that held it, not two.
-    -- `counted` spans every opening of this corpse; `seenHere` only this one,
-    -- so two slots of the same item now still add up, while leftovers seen
-    -- again on a return visit add nothing.
-    local counted = corpse.items
     local seenHere = {}
 
     local gotCount, lootCount = pcall(GetNumLootItems)
@@ -1268,35 +1351,8 @@ function Harvest:RecordCorpse()
         -- already counted, and the rest of the window is still worth reading.
         local name = ours and ok and Readable(slotName) or nil
 
-        local already = name and counted[name] and not seenHere[name]
-
-        if name and not already and not self:IsMoney(slot, name) then
-            local entry = record.items[name]
-
-            if not entry then
-                entry = { name = name, count = 0, corpses = 0 }
-                record.items[name] = entry
-            end
-
-            entry.count = entry.count + (ReadableNumber(quantity) or 1)
-            corpse.counts = corpse.counts or {}
-            corpse.counts[name] = (corpse.counts[name] or 0) + (ReadableNumber(quantity) or 1)
-
-            if not seenHere[name] then
-                seenHere[name] = true
-                counted[name] = true
-                entry.corpses = entry.corpses + 1
-            end
-
-            if not entry.id and caps.lootSlotLink then
-                local gotLink, link = pcall(GetLootSlotLink, slot)
-                -- The link comes from the same restricted source as the name,
-                -- so it is read the same way before anything matches on it.
-                local text = gotLink and Readable(link) or nil
-                if text then
-                    entry.id = tonumber(text:match("item:(%d+)"))
-                end
-            end
+        if name and not self:IsMoney(slot, name) then
+            AddSlot(record, corpse, seenHere, slot, name, quantity, caps)
         end
     end
 
@@ -1308,6 +1364,48 @@ function Harvest:RecordCorpse()
 
     self.dirty = true
     -- What the goal arrow's ranking was made from moved (Arrow:Sources).
+    self.changes = (self.changes or 0) + 1
+end
+
+--- Another corpse an area loot window took (OtherCorpses): one corpse of
+--- `mob`, with only what the client says came off it. Retail loots every
+--- corpse in reach at once, and counting only the one clicked left the
+--- rest out of every rate (2026-10-24). It was killed where you stand, so
+--- it goes under your zone and subzone, as the one you clicked does.
+function Harvest:RecordOther(guid, mob, level)
+    local caps = self:Capabilities()
+    local zone, location = self:Where()
+
+    local record = self:GetRecord(mob, level, zone, location)
+    record.corpses = record.corpses + 1
+    record.npc = record.npc or Harvest.NpcID(guid)
+    Harvest.changes = (Harvest.changes or 0) + 1
+
+    if not record.coords then
+        local x, y = self:PlayerPosition()
+        if x then record.coords = { x, y } end
+    end
+
+    local corpse = { record = record, items = {} }
+    self.opened[guid] = corpse
+
+    local gotCount, lootCount = pcall(GetNumLootItems)
+    local count = gotCount and ReadableNumber(lootCount) or nil
+    local seenHere = {}
+
+    for slot = 1, count or 0 do
+        local share, here = self:SlotShare(slot, guid)
+        if here then
+            local ok, _, slotName = pcall(GetLootSlotInfo, slot)
+            local name = ok and Readable(slotName) or nil
+            if name and not self:IsMoney(slot, name) then
+                -- A share the client will not let be read is one.
+                AddSlot(record, corpse, seenHere, slot, name, share or 1, caps)
+            end
+        end
+    end
+
+    self.dirty = true
     self.changes = (self.changes or 0) + 1
 end
 
