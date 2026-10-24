@@ -573,8 +573,15 @@ function Fishing:OnLoot()
     local items, quantities = ns.Tracker:LootedItems(true)
 
     local x, y = ns.Harvest:PlayerPosition()
+    local school = cast and cast.school or nil
 
-    return self:Record(zone, location, cast and cast.school or nil, items, quantities,
+    -- Where you stood goes on the maps beside your herbs and veins.
+    local mapID, mapX, mapY = ns.Harvest:PlayerMapPosition()
+    if mapID and ns.Gathering then
+        ns.Gathering:AddSpot(mapID, mapX, mapY, school or OPEN_WATER, "fish", items, quantities)
+    end
+
+    return self:Record(zone, location, school, items, quantities,
         self:Skill(), x and { x, y } or nil)
 end
 
