@@ -276,8 +276,10 @@ function GrindingUI:Build(frame)
     self.rule = rule
 
     -- Gather to cap sits above the headings in the Ore, Herbs and Leather
-    -- views (UI/GatherToCap.lua); PlacePath makes room for it.
-    if ns.GatherToCapUI then ns.GatherToCapUI:Build(panel) end
+    -- views (UI/GatherToCap.lua; on Retail, Road to max, UI/RoadToMax.lua);
+    -- PlacePath makes room for it.
+    local pathUI = ns.RoadToMaxUI or ns.GatherToCapUI
+    if pathUI then pathUI:Build(panel) end
     self.pathRoom = 0
 
     local list = Widgets.CreateRowList(panel, {
@@ -1464,8 +1466,9 @@ function GrindingUI:Render(arrive)
     if ns.UI and ns.UI.frame and ns.UI.tab == "grind" then ns.UI:ApplySize() end
     self:PaintControls(low, high)
     self.footer:SetText(GrindingUI.FooterText(layout))
-    if ns.GatherToCapUI then
-        local ok, room = pcall(ns.GatherToCapUI.Update, ns.GatherToCapUI, GrindingUI.PathView(layout))
+    local pathUI = ns.RoadToMaxUI or ns.GatherToCapUI
+    if pathUI then
+        local ok, room = pcall(pathUI.Update, pathUI, GrindingUI.PathView(layout))
         self:PlacePath(ok and room or 0)
         if not ok and ns.Debug then ns.Debug("gather to cap: " .. tostring(room)) end
     end

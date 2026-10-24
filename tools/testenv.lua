@@ -363,6 +363,7 @@ local FILES = {
     "Logic/Grinding.lua",
     "Logic/GrindGather.lua",
     "Logic/GatherToCap.lua",
+    "Logic/RoadToMax.lua",
     "Logic/Share.lua",
     "Logic/Transfer.lua",
     "Logic/GuildShare.lua",
@@ -399,6 +400,7 @@ local UI_FILES = {
     "UI/KillGoal.lua",
     "UI/Grinding.lua",
     "UI/GatherToCap.lua",
+    "UI/RoadToMax.lua",
     "UI/Stats.lua",
     "UI/MapMarkers.lua",
     "UI/Heat.lua",
@@ -457,6 +459,13 @@ env.RETAIL_LEFT_OUT = {
     ["UI/GatherToCap.lua"] = true,
 }
 
+--- Retail's own files, in place of Gather to cap: loaded only with
+--- `opts.retail`, as the Forever TOC never lists them.
+env.RETAIL_ONLY = {
+    ["Logic/RoadToMax.lua"] = true,
+    ["UI/RoadToMax.lua"] = true,
+}
+
 --- Is there a generated harvest file to load?
 function env.HasHarvested()
     local handle = io.open(ROOT .. "/" .. HARVESTED, "r")
@@ -498,14 +507,16 @@ function env.Load(opts)
     end
 
     for _, file in ipairs(FILES) do
-        if not (opts.retail and (env.FOREVER_DATA[file] or env.RETAIL_LEFT_OUT[file])) then Run(file) end
+        if not (opts.retail and (env.FOREVER_DATA[file] or env.RETAIL_LEFT_OUT[file]))
+            and (opts.retail or not env.RETAIL_ONLY[file]) then Run(file) end
     end
 
     if opts.harvested and not opts.retail and env.HasHarvested() then Run(HARVESTED) end
 
     if opts.ui then
         for _, file in ipairs(UI_FILES) do
-            if not (opts.retail and env.RETAIL_LEFT_OUT[file]) then Run(file) end
+            if not (opts.retail and env.RETAIL_LEFT_OUT[file])
+                and (opts.retail or not env.RETAIL_ONLY[file]) then Run(file) end
         end
     end
 

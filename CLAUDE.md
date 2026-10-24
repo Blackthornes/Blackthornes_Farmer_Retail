@@ -42,6 +42,25 @@ ever touch the Forever addon. So:
   `UI/GatherToCap.lua`), built on Classic's 1 to 300 skill ladder. Their
   Settings rows and commands show only where they are loaded. A Retail
   version of either is its own job, on the owner's yes.
+- Road to max (the owner approved the mockup and its words, 2026-10-24,
+  and asked for the whole road "from lvl 1 to endgame"): Retail's Gather
+  to cap, `Logic/RoadToMax.lua` and `UI/RoadToMax.lua`, in the Retail TOC
+  only (`env.RETAIL_ONLY`, loaded by `env.Load` only with `retail`). The
+  Grind tab's Ore, Herbs and Leather views show the twelve expansions in
+  order, Classic to Midnight, each with your skill in its own line
+  (`C_TradeSkillUI.GetProfessionInfoBySkillLineID` by `EXPANSIONS[].lines`;
+  Midnight's ID is learned when a profession window opens, the line newer
+  than every known one), lit where you stand (zone name, else the map's
+  continent). Classic keeps Forever's ladder; the others are `STEPS` (4)
+  steps of the cap in their zones, the one you are on where you gathered
+  most. "About N more gathers" is your own rate, gathers against points,
+  once `MIN_SAMPLE` (20) are behind it; `Gathering.Record` and
+  `GrindGather.NoteSkin` are wrapped, not changed, to count it. Saved
+  account wide in `roadToMax` (`[guid] = { lines, pace }`, `newest`; never
+  rename it). `UI/Grinding.lua` draws `ns.RoadToMaxUI or ns.GatherToCapUI`.
+  Zones are matched by English name, so other languages match fewer.
+  The line IDs and continents are not yet seen in game. Tested in
+  `tools/test_roadtomax.lua`.
 - The level cap is the game's (`XP.MaxLevel`), 90 on Retail since
   Midnight (the owner asked 2026-10-24). `XP.CAP` (the fallback when the
   game won't say) is 90 here, not Forever's 60, and the Grind tab's level
