@@ -27,8 +27,9 @@ ever touch the Forever addon. So:
   only so Forever changes merge cleanly. `tools/test_retail.lua` checks it
   and that the addon loads and logs in without them.
 - Never put Forever's CurseForge ID (1710618) in the TOC:
-  `tools/check_release.py` refuses a tag that does. Retail gets its own
-  project once it works in game.
+  `tools/check_release.py` refuses a tag that does. Retail has its own
+  project, **1763183** (made 2026-10-24), in the TOC; uploads need the
+  `CF_API_KEY` repository secret, which the owner sets himself.
 - Catching up: merge Forever's `main` (read only, from a plain clone) into
   a Retail branch, so the shared history keeps later merges clean. Last
   caught up to Forever's `16167e1` (2026-10-24, the fold gem).

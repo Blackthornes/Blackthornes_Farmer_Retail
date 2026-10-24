@@ -9,9 +9,9 @@
 
 # Filled in once the project exists on each site. The packager reads these
 # to know where to upload; a line that stays commented is simply skipped.
-# This is the Retail copy. It gets its own CurseForge project; never put the
+# This is the Retail copy, with its own CurseForge project. Never put the
 # Forever project's ID (1710618) here, or a tag would upload Retail to it.
-# X-Curse-Project-ID: 
+## X-Curse-Project-ID: 1763183
 # X-Wago-ID: 
 # X-WoWI-ID: 
 

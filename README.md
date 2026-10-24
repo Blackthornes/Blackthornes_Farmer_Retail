@@ -763,5 +763,7 @@ skips any site whose secret is missing:
 | `WOWI_API_TOKEN` | WoWInterface |
 
 Each site also needs its project ID in the TOC (`X-Curse-Project-ID`,
-`X-Wago-ID`, `X-WoWI-ID`). CurseForge's is 1710618, the existing Farmer
-project; the other two stay commented out until those projects exist.
+`X-Wago-ID`, `X-WoWI-ID`). CurseForge's is 1763183, Farmer Retail's own
+project (never 1710618, the Forever project; `tools/check_release.py`
+refuses a tag that has it); the other two stay commented out until those
+projects exist.
