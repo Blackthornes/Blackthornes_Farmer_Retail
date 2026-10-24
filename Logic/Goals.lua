@@ -471,11 +471,7 @@ function Goals:BestSpot(name)
     end
 
     if not best then
-        local level = 1
-        if type(UnitLevel) == "function" then
-            local ok, value = pcall(UnitLevel, "player")
-            level = ok and ns.Harvest.ReadableNumber(value) or level
-        end
+        local level = ns.Harvest.PlayerLevel() or 1
 
         for _, source in ipairs(ns.Search:SortedSources(item)) do
             local low = source.minLevel or 0

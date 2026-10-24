@@ -12,6 +12,12 @@ local L = ns.L
 
 local Search = ns.NewModule("Search")
 
+-- A record's levels to show: the zone's range for a mob that scales to
+-- you (Harvest.Levels), else the levels seen.
+local function LowLevel(record) return (ns.Harvest.Levels(record)) end
+local function HighLevel(record) return select(2, ns.Harvest.Levels(record)) end
+local function Scales(record) return select(3, ns.Harvest.Levels(record)) or nil end
+
 local Util = ns.Util
 
 local SCORE = {
@@ -347,7 +353,7 @@ function Search:FoundItems()
                 if type(entry) == "table" then
                     Add(name, entry.id, { kind = "mob", name = Text(mob), zone = Text(record.zone),
                         location = Text(record.location), coords = Coords(record.coords),
-                        minLevel = tonumber(record.minLevel), maxLevel = tonumber(record.maxLevel),
+                        minLevel = LowLevel(record), maxLevel = HighLevel(record), scales = Scales(record),
                         chance = Rate(entry.corpses, record.corpses),
                         dropText = Count(entry.corpses, record.corpses) })
                 end
@@ -404,7 +410,7 @@ function Search:FoundItems()
                         if type(got) == "table" then
                             Add(name, got.id, { kind = "container", name = container, zone = zone,
                                 location = Text(record.location), coords = Coords(record.coords),
-                                minLevel = tonumber(record.minLevel), maxLevel = tonumber(record.maxLevel),
+                                minLevel = LowLevel(record), maxLevel = HighLevel(record), scales = Scales(record),
                                 chance = Rate(got.opens, entry.opens),
                                 dropText = Count(got.opens, entry.opens) })
                         end
@@ -483,12 +489,7 @@ end
 
 --- The player's level and zone, each nil when the client will not say.
 function Search:Here()
-    local level
-    if UnitLevel then
-        local ok, value = pcall(UnitLevel, "player")
-        level = ok and ns.Harvest.ReadableNumber(value) or nil
-        if level and level <= 0 then level = nil end
-    end
+    local level = ns.Harvest and ns.Harvest.PlayerLevel() or nil
 
     local zone = ns.Harvest and (ns.Harvest:Where()) or nil
     return level, zone

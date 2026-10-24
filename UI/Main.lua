@@ -164,12 +164,8 @@ local COLUMN = Columns()
 -- Falls back to plain text before the player's level is known, which is the
 -- case in tests and for a moment at login.
 local function DifficultyColor(level)
-    -- Read in a pcall, as every client value is.
-    local player = 0
-    if UnitLevel then
-        local ok, value = pcall(UnitLevel, "player")
-        player = ok and ns.Harvest.ReadableNumber(value) or 0
-    end
+    -- Read in a pcall, as every client value is (Harvest.PlayerLevel).
+    local player = ns.Harvest.PlayerLevel() or 0
     if not level or player <= 0 then return Theme.Unpack("text") end
 
     local difference = level - player
@@ -184,6 +180,19 @@ end
 
 -- The goals panel's Where? list colours its levels the same way.
 UI.DifficultyColor = DifficultyColor
+
+--- The level a source's colour goes by: your own level, held inside the
+--- zone's range, for a mob that scales to you (Harvest.Levels); else its
+--- top level.
+function UI.ColorLevel(source)
+    if source.scales and source.minLevel then
+        local player = ns.Harvest.PlayerLevel()
+        if player then
+            return math.max(source.minLevel, math.min(source.maxLevel or source.minLevel, player))
+        end
+    end
+    return source.maxLevel or source.minLevel
+end
 
 -- Each kind of source has its own colour on its tag, so a column of them
 -- reads at a glance: red for mobs, green for herbs, copper for ore, blue for
@@ -517,11 +526,7 @@ function UI:ShowEmpty()
 
     -- Read in a pcall, as every client value is: inside an instance the
     -- client can hand back one that raises when touched.
-    local level = 0
-    if UnitLevel then
-        local ok, value = pcall(UnitLevel, "player")
-        level = ok and ns.Harvest.ReadableNumber(value) or 0
-    end
+    local level = ns.Harvest.PlayerLevel() or 0
     local picks = level > 0 and ns.Search:ForLevel(level) or {}
 
     for _, chip in ipairs(self.suggestChips) do chip:Hide() end
@@ -1097,7 +1102,7 @@ function UI:UpdateRow(row, data, index)
     row.where:Show()
 
     row.level:SetText(ns.Search:LevelText(source))
-    row.level:SetTextColor(DifficultyColor(source.maxLevel or source.minLevel))
+    row.level:SetTextColor(DifficultyColor(UI.ColorLevel(source)))
     row.level:Show()
 
     if source.chance then
