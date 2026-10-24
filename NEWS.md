@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.46.0
+
+- This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.
+- Farmer counts every kill and drop you loot, so a mob's worth comes from your own play. Looting a whole pack at once counts every corpse.
+- Rankings lists mobs by what a kill is worth. If you use TradeSkillMaster or Auctionator, drops are priced from their auction prices.
+- Search any item, zone or mob to see where you found it. Set a goal and a gold arrow leads you there.
+- The Stats tab turns your farming into charts: gold an hour, where your gold came from and your best mobs.
+- The Open button opens clams, sacks and lockboxes, and Farmer counts what comes out.
+- Herbs, ore and fishing spots are marked on your map and minimap.
+
 ## 0.45.0
 
 - You can set a kill goal, for any mob or one mob. It shows first in your Goals panel, and a summary opens when you finish. Start one with Set another in the Goals panel.
