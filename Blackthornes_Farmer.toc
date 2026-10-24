@@ -61,6 +61,7 @@ Logic\Arrow.lua
 Logic\TomTom.lua
 Logic\Grinding.lua
 Logic\GrindGather.lua
+Logic\RoadToMax.lua
 Logic\Share.lua
 Logic\Transfer.lua
 Logic\GuildShare.lua
@@ -87,6 +88,7 @@ UI\RankUp.lua
 UI\Recap.lua
 UI\KillGoal.lua
 UI\Grinding.lua
+UI\RoadToMax.lua
 UI\Stats.lua
 UI\MapMarkers.lua
 UI\Heat.lua
