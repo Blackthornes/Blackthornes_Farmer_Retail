@@ -1654,6 +1654,25 @@ Not for skinning windows. Each is marked opened (`Harvest.opened`,
 is recorded last and stays on top of the panel. Saved data is not
 rewritten. Tested in `tools/test_aoeloot.lua`. Not yet seen in game.
 
+## Levels that follow you (Retail)
+
+The owner said build it (2026-10-24): Retail scales most open world mobs
+to the player's level within the zone's range, so the level a record saw
+was only the player's level that day (a camp met at 15 still read "15-17"
+at 40). `Harvest:NoteScaling` (from `GetRecord`) keeps the zone's range
+(`C_Map.GetMapLevels` on the map you stand in, `Harvest.ZoneScales`) in
+`record.scales = { low, high }` (never rename it) when the mob was within
+`SCALE_SLACK` (2) of your level. `Harvest.Levels(record)` gives the range
+when there is one, else the levels seen; the Grind tab, Rankings' level,
+the search, Where to farm and Goals read it (rows carry `scales`), and
+`UI.ColorLevel` colours a scaling row at your level held inside the range.
+`minLevel`/`maxLevel` are never rewritten: World drops and the export keep
+the level at the kill. Your own level is `Harvest.PlayerLevel`
+(`UnitEffectiveLevel` first, for Party Sync and Timewalking); the XP bar
+keeps the real level. Records from before have no `scales` until that mob
+is killed again; sharing does not carry it. Tested in
+`tools/test_scaledlevels.lua`. Not yet seen in game.
+
 ## What's New
 
 The owner asked (2026-10-12) for the Discord #general post to show in game,

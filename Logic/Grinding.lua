@@ -463,7 +463,10 @@ function Grinding:Mobs()
             -- Kept under the client's zone name ("Wald von Elwynn"); in
             -- English, so it is the data's camp and confirms its spot.
             local mob = Spot(record.mob, ns.Spots.English(record.zone), record.location)
-            Note(mob, true, tonumber(record.minLevel), tonumber(record.maxLevel), record.coords)
+            -- A mob that scales to you is in band anywhere in the zone's
+            -- range (Harvest.Levels), not only at the level you met it.
+            local low, high = ns.Harvest.Levels(record)
+            Note(mob, true, low, high, record.coords)
             mob.corpses = (mob.corpses or 0) + (tonumber(record.corpses) or 0)
             mob.dropSpot = true
             for name in pairs(type(record.items) == "table" and record.items or {}) do

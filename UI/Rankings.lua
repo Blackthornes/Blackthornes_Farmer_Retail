@@ -992,9 +992,8 @@ end
 
 --- The band of the character's own level, or nil.
 local function PlayerBand()
-    local ok, level = pcall(UnitLevel, "player")
-    if not ok then return nil end
-    return ns.WorldDrops.Band(level)
+    -- Your level as the fight sees it (Party Sync, Timewalking).
+    return ns.WorldDrops.Band(ns.Harvest.PlayerLevel())
 end
 
 --- The World Drops chip's rows: a row per band in the headings' order and

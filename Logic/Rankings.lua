@@ -90,7 +90,8 @@ function Rankings:OwnLevels()
         end
     end
     for _, record in pairs(Harvest and Harvest.records or {}) do
-        local mob, low, high = record.mob, tonumber(record.minLevel), tonumber(record.maxLevel)
+        -- A mob that scales to you reads as the zone's range (Harvest.Levels).
+        local mob, low, high = record.mob, Harvest.Levels(record)
         if type(mob) == "string" and low then
             high = high or low
             Note(mob, low, high)

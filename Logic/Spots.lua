@@ -23,6 +23,12 @@
 local _, ns = ...
 local L = ns.L
 
+-- A record's levels to show: the zone's range for a mob that scales to
+-- you (Harvest.Levels), else the levels seen.
+local function LowLevel(record) return (ns.Harvest.Levels(record)) end
+local function HighLevel(record) return select(2, ns.Harvest.Levels(record)) end
+local function Scales(record) return select(3, ns.Harvest.Levels(record)) or nil end
+
 local Spots = ns.NewModule("Spots")
 
 local Util = ns.Util
@@ -308,8 +314,8 @@ function Spots:Player()
         end
     end
 
-    local level = ns.Harvest.ReadableNumber(Read(UnitLevel, "player"))
-    if level and level <= 0 then level = nil end
+    -- Party Sync and Timewalking lower your level (Harvest.PlayerLevel).
+    local level = ns.Harvest.PlayerLevel()
 
     return { zone = zone, level = level, skills = Spots.Skills() }
 end
@@ -426,6 +432,7 @@ function Spots:Candidates(itemName)
             -- Your record fills in what the database left out.
             existing.yours = existing.yours or spot.yours
             existing.measured = existing.measured or spot.measured
+            if not existing.minLevel then existing.scales = spot.scales end
             existing.minLevel = existing.minLevel or spot.minLevel
             existing.maxLevel = existing.maxLevel or spot.maxLevel
             existing.coords = existing.coords or spot.coords
@@ -466,8 +473,9 @@ function Spots:Candidates(itemName)
                 -- same as the database's: the arrow and the map pin use it.
                 coords = type(record.coords) == "table" and tonumber(record.coords[1])
                     and tonumber(record.coords[2]) and record.coords or nil,
-                minLevel = record.minLevel,
-                maxLevel = record.maxLevel,
+                minLevel = LowLevel(record),
+                maxLevel = HighLevel(record),
+                scales = Scales(record),
                 yours = { kills = record.corpses, got = row.entry.corpses },
                 measured = record.corpses >= 20 and row.chance or nil,
                 forever = true,
@@ -528,8 +536,9 @@ function Spots:Candidates(itemName)
                     location = record.location,
                     coords = type(record.coords) == "table" and tonumber(record.coords[1])
                         and tonumber(record.coords[2]) and record.coords or nil,
-                    minLevel = record.minLevel,
-                    maxLevel = record.maxLevel,
+                    minLevel = LowLevel(record),
+                    maxLevel = HighLevel(record),
+                    scales = Scales(record),
                     yours = yours,
                     forever = true,
                 })

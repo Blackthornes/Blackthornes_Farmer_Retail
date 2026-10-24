@@ -1055,6 +1055,15 @@ function Harvest:NameUnnamed()
             into.coords = into.coords or old.coords
             if old.minLevel then into.minLevel = math.min(into.minLevel or old.minLevel, old.minLevel) end
             if old.maxLevel then into.maxLevel = math.max(into.maxLevel or old.maxLevel, old.maxLevel) end
+            if type(old.scales) == "table" and tonumber(old.scales[1]) and tonumber(old.scales[2]) then
+                local scales = type(into.scales) == "table" and into.scales or nil
+                if scales and tonumber(scales[1]) and tonumber(scales[2]) then
+                    scales[1] = math.min(scales[1], old.scales[1])
+                    scales[2] = math.max(scales[2], old.scales[2])
+                else
+                    into.scales = { old.scales[1], old.scales[2] }
+                end
+            end
             for itemName, entry in pairs(old.items or {}) do
                 local have = into.items[itemName]
                 if have then
@@ -1123,9 +1132,80 @@ function Harvest:GetRecord(mob, level, zone, location)
     if level then
         record.minLevel = math.min(record.minLevel or level, level)
         record.maxLevel = math.max(record.maxLevel or level, level)
+        self:NoteScaling(record, level)
     end
 
     return record
+end
+
+-- Levels that follow you (the owner said build it, 2026-10-24). Retail
+-- scales most open world mobs to the player's level, within the zone's
+-- range, so the level a record saw is only the player's level that day: a
+-- camp met at 15 still read "15-17" at 40. A mob met at your own level
+-- (within SCALE_SLACK) in a zone the game gives a range for keeps that
+-- range in `scales` ({ low, high }, never renamed), and the readers
+-- (Harvest.Levels) take it over the levels seen. minLevel and maxLevel stay
+-- as they are, for World drops and the export. A record from before has
+-- no `scales` until that mob is killed again.
+Harvest.SCALE_SLACK = 2
+
+--- Your level as the fight sees it: Party Sync and Timewalking lower it,
+--- so UnitEffectiveLevel first, else UnitLevel. Nil when unreadable.
+function Harvest.PlayerLevel()
+    for _, name in ipairs({ "UnitEffectiveLevel", "UnitLevel" }) do
+        local read = _G[name]
+        if type(read) == "function" then
+            local ok, value = pcall(read, "player")
+            local number = ok and ReadableNumber(value) or nil
+            if number and number > 0 then return number end
+        end
+    end
+    return nil
+end
+
+--- The level range the zone you stand in scales to, low and high, or nil
+--- when the game gives none or the zone does not scale.
+function Harvest.ZoneScales()
+    local maps = _G.C_Map
+    if type(maps) ~= "table" or type(maps.GetMapLevels) ~= "function"
+        or type(maps.GetBestMapForUnit) ~= "function" then
+        return nil
+    end
+    local okMap, mapID = pcall(maps.GetBestMapForUnit, "player")
+    mapID = okMap and ReadableNumber(mapID) or nil
+    if not mapID then return nil end
+    local ok, low, high = pcall(maps.GetMapLevels, mapID)
+    low, high = ok and ReadableNumber(low) or nil, ok and ReadableNumber(high) or nil
+    if not (low and high) or low <= 0 or high <= low then return nil end
+    return low, high
+end
+
+--- Keep the zone's range on `record` when a mob of `level` scaled to you.
+function Harvest:NoteScaling(record, level)
+    local mine = Harvest.PlayerLevel()
+    if not mine or math.abs(level - mine) > Harvest.SCALE_SLACK then return end
+    local low, high = Harvest.ZoneScales()
+    if not low then return end
+    local scales = type(record.scales) == "table" and record.scales or nil
+    if scales and tonumber(scales[1]) and tonumber(scales[2]) then
+        scales[1] = math.min(scales[1], low)
+        scales[2] = math.max(scales[2], high)
+    else
+        record.scales = { low, high }
+    end
+end
+
+--- A record's levels to show and filter by: the zone's range when the mob
+--- scales to you, else the levels seen. Returns low, high and true when
+--- they are the range.
+function Harvest.Levels(record)
+    local scales = type(record) == "table" and record.scales
+    if type(scales) == "table" and tonumber(scales[1]) and tonumber(scales[2]) then
+        return tonumber(scales[1]), tonumber(scales[2]), true
+    end
+    if type(record) ~= "table" then return nil end
+    local low = tonumber(record.minLevel)
+    return low, tonumber(record.maxLevel) or low, false
 end
 
 --- Is this loot slot money rather than an item?

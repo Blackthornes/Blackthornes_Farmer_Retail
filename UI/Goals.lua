@@ -1649,8 +1649,8 @@ function GoalsUI:OpenSpots(item, anchor)
         -- Coloured the way the search window colours a level: red well above
         -- you, yellow around you, green and then grey below.
         row.level:SetText(spot.minLevel and ns.Search:LevelText(spot) or "")
-        if ns.UI and ns.UI.DifficultyColor then
-            row.level:SetTextColor(ns.UI.DifficultyColor(spot.maxLevel or spot.minLevel))
+        if ns.UI and ns.UI.DifficultyColor and ns.UI.ColorLevel then
+            row.level:SetTextColor(ns.UI.DifficultyColor(ns.UI.ColorLevel(spot)))
         else
             row.level:SetTextColor(Theme.Unpack("text"))
         end
