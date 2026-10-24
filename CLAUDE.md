@@ -31,7 +31,11 @@ ever touch the Forever addon. So:
   project, **1763183** (made 2026-10-24), in the TOC; uploads need the
   `CF_API_KEY` repository secret, which the owner sets himself.
 - Catching up: merge Forever's `main` (read only, from a plain clone) into
-  a Retail branch, so the shared history keeps later merges clean. Last
+  a Retail branch, so the shared history keeps later merges clean. Read
+  `docs/retail-differences.md` first: it lists every place Retail differs
+  from Forever on purpose and whether a sync keeps Retail's lines or blends
+  Forever's change in. Every Retail-only PR adds or updates its entry
+  there. Last
   caught up to Forever's `16167e1` (2026-10-24, the fold gem).
 - The Retail TOC also leaves out these Forever features
   (`env.RETAIL_LEFT_OUT`, checked by `tools/test_retail.lua`): drop sending

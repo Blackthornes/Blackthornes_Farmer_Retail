@@ -1,0 +1,190 @@
+# Retail differences
+
+Every place this repo (Farmer for Retail) differs from Forever Farmer on
+purpose, and what a catch-up with Forever does when Forever changes the same
+code. A developer note: it never ships (`.pkgmeta` ignores `docs`).
+
+**Read this before every catch-up.** For each Forever commit, check its files
+against the list below. A file not listed here is the same as Forever's and
+takes Forever's change as it is. A file listed here is a clash only where
+Forever's change touches the lines named; then follow that entry's rule and
+show the owner both versions.
+
+The rules:
+
+- **Keep Retail:** skip Forever's change to these lines.
+- **Blend:** bring Forever's idea over on top of Retail's version (the usual
+  pick). Retail's lines stay; Forever's fix or feature is added to them.
+- **Forever only:** the file stays in the repo, untouched, so merges stay
+  clean, but Retail never loads it. Take Forever's changes to it as they are;
+  they do nothing on Retail. A new Forever feature that needs one of these
+  is a question for the owner.
+
+Baseline: Forever `main` at `16167e1` (2026-10-24, the fold gem), merged in
+PR #3. `git diff 16167e1 HEAD` on Retail's `main` shows every line below.
+
+**Keep it current:** every Retail-only PR adds or updates its entry here in
+the same PR, and every catch-up PR moves the baseline line.
+
+---
+
+## 1. The TOC and what Retail loads
+
+`Blackthornes_Farmer.toc`, `.pkgmeta`, `tools/testenv.lua`
+(`env.FOREVER_DATA`, `env.RETAIL_LEFT_OUT`, `env.RETAIL_ONLY`, `env.Load`'s
+`opts.retail`), `tools/test_retail.lua`. PRs: the copy commits
+(`905053a`, `613fcd5`), #8, #9.
+
+- `## Interface: 120105`, the number the Retail game reports (Forever: 16001).
+- `## X-Curse-Project-ID: 1763183`, Retail's own CurseForge project. Never
+  Forever's 1710618.
+- Not listed in the TOC, and in `.pkgmeta`'s ignore list:
+  - Classic and Forever data: `Data/NpcNames.lua`, `Data/ForeverNpcNames.lua`,
+    `Data/Data_Mining.lua`, `Data_Herbalism`, `Data_Cloth`, `Data_Leather`,
+    `Data_Misc`, `Data_MobDrops`, `Data_ClassicDrops`, `Data_Harvested`, and
+    the `Harvest_Carryover` lines with their `#@do-not-package@` fence.
+  - Forever-only features: `Logic/Contribute.lua` (sending drops to
+    Blackthornes) and `Logic/Legacy.lua` (Legacy perks). `Contribute.RECIPIENTS`
+    is unchanged from Forever's; Retail never sends because the file never
+    loads, so never add it to the TOC.
+  - Built on the Classic world: Guide Me (`Data/Travel.lua`,
+    `Data/TravelZones.lua`, `Logic/Travel.lua`, `UI/TravelCard.lua`,
+    `UI/TravelMap.lua`) and Gather to cap (`Logic/GatherToCap.lua`,
+    `UI/GatherToCap.lua`).
+- Listed in the Retail TOC only: `Logic/RoadToMax.lua`, `UI/RoadToMax.lua`
+  (section 6), where Forever lists Gather to cap.
+
+**Sync rule: Keep Retail.** Never take Forever's `## Interface` or
+`X-Curse-Project-ID` lines. A Forever commit that adds a file to its TOC:
+add it to Retail's TOC in the same place, unless it is Forever or Classic
+data or built on one of the left-out features; then leave it out, add it to
+`.pkgmeta`, `env.FOREVER_DATA` or `env.RETAIL_LEFT_OUT`, and ask the owner.
+The left-out files themselves are **Forever only** (take Forever's changes,
+they never load).
+
+## 2. Code that runs without the left-out files
+
+So the addon loads and logs in without them (checked by
+`tools/test_retail.lua`).
+
+- `UI/Settings.lua`: the "Guide Me:" row and its `Refresh` line only
+  `if ns.Travel`; the About page's drop-sending box only
+  `if ns.Contribute`.
+- `Logic/Share.lua`: `/farm share drops` only `and ns.Contribute`.
+- `UI/Grinding.lua`: draws `ns.RoadToMaxUI or ns.GatherToCapUI` in `Build`
+  and `Render`.
+
+**Sync rule: Blend.** Take Forever's change, and keep each guard. A new
+Forever row, command or call into Contribute, Legacy, Travel or GatherToCap
+gets the same `if ns.X` guard here.
+
+## 3. Area loot counts every corpse (PR #4)
+
+`Logic/Harvest.lua`: `Harvest:OtherCorpses`, `Harvest:SlotShare`,
+`Harvest:RecordOther`, the local `AddSlot` (pulled out of `RecordCorpse` so
+both use it), and the loop at the top of `Harvest:RecordCorpse`.
+`Logic/Tracker.lua`: `Tracker:OtherShare` and, in `Tracker:OnLoot`, the
+`others` list and its `Record` loop (and `place` moved above it). Test
+`tools/test_aoeloot.lua`.
+
+Retail loots every corpse in reach in one window. Each other corpse the
+window names is a kill and a drop-rate corpse of its own, with only its own
+share of each slot and its own coin; the one clicked is recorded last.
+
+**Sync rule: Blend.** This is the most likely clash: any Forever fix to loot
+counting, `RecordCorpse` or `Tracker:OnLoot` goes on top of Retail's
+version, and must reach the other corpses too (through `AddSlot`,
+`RecordOther` or `OtherShare`). Never take Forever's `RecordCorpse` or
+`OnLoot` whole.
+
+## 4. Levels that follow you (PR #6)
+
+`Logic/Harvest.lua`: `Harvest.SCALE_SLACK`, `Harvest.PlayerLevel`,
+`Harvest.ZoneScales`, `Harvest:NoteScaling` (called from `GetRecord`),
+`Harvest.Levels`, and `scales` merged in `Harvest:NameUnnamed`. Readers:
+`Logic/Grinding.lua` (`Grinding:Mobs`), `Logic/Rankings.lua`
+(`Rankings:OwnLevels`), `Logic/Search.lua` (`LowLevel`, `HighLevel`,
+`Scales`, `FoundItems`, `Here`), `Logic/Spots.lua` (the same helpers,
+`Spots:Player`, `Spots:Candidates`), `Logic/Goals.lua` (`Goals:BestSpot`),
+`UI/Main.lua` (`UI.ColorLevel`, `DifficultyColor`, `ShowEmpty`,
+`UpdateRow`), `UI/Goals.lua` (`OpenSpots`), `UI/Rankings.lua`
+(`PlayerBand`). Test `tools/test_scaledlevels.lua`.
+
+Retail scales open world mobs to you, so a record keeps the zone's range in
+`record.scales` (never rename it) and the lists show that range. Your level
+is `Harvest.PlayerLevel()` (`UnitEffectiveLevel` first, for Party Sync and
+Timewalking) in place of the old `pcall(UnitLevel, "player")` blocks.
+
+**Sync rule: Blend.** A Forever change that reads `record.minLevel` /
+`maxLevel` for showing or sorting reads `Harvest.Levels(record)` here; one
+that reads `UnitLevel("player")` for the player's level uses
+`Harvest.PlayerLevel()`. World drops and the export keep the level at the
+kill, as Forever does.
+
+## 5. Level 90 cap (PR #5)
+
+`Logic/XP.lua`: `XP.CAP = 90` (Forever 60), its comments, and
+`XP.Needed`, which takes a level past Classic's 1 to 60 chart as about what
+the current level needs. `Logic/Grinding.lua`: the comment on
+`Grinding.MAX_LEVEL` (the steppers reach the game's cap). Tests
+`tools/test_xpbar.lua`, `tools/test_grinding.lua`.
+
+**Sync rule: Keep Retail** for `XP.CAP` and the levels past 60 in
+`XP.Needed`; **Blend** any other Forever XP bar change.
+
+## 6. Road to max (PR #9)
+
+`Logic/RoadToMax.lua`, `UI/RoadToMax.lua` (Retail only), the TOC lines,
+`UI/Grinding.lua` (section 2), the strings in every `Locale/*.lua`. Saved
+as `roadToMax` (never rename it). Test `tools/test_roadtomax.lua`.
+
+Retail's Gather to cap: the twelve expansions in order, Classic to Midnight.
+Its Classic stops are its own copy of Forever's ladder (`RoadToMax.CLASSIC`),
+not a call into `GatherToCap`. It wraps `Gathering.Record` and
+`GrindGather.NoteSkin` at load rather than changing them.
+
+**Sync rule: Keep Retail.** A Forever change to Gather to cap does not come
+over by itself. If it fixes something Road to max shares (Classic's
+ladder, the Show the Way or Set Goal buttons, how `PlacePath` makes room),
+**Blend** it into the RoadToMax files and say so. Keep the wraps working if
+Forever changes `Gathering:Record` or `GrindGather:NoteSkin`'s arguments.
+
+## 7. Item icons on map pins, fishing pins, nearby nodes join (PR #10)
+
+`UI/MapMarkers.lua`: `ItemIcon`, `NodeItems`, `SpotItems`, `SpotIcon`,
+`BackAt`, `IsBack`, `CreatePin`, `DrawWorld` (redrawn at `worldNextBack`),
+`PlaceWorld`, `SpotsOn`. `Logic/Gathering.lua`: `Gathering.NEAR_YARDS`,
+`NearSpot`, `Gathering.Joins`, `Gathering.Joined`, `NoteItems`,
+`Gathering:AddSpot(mapID, x, y, node, kind, items, quantities)` and its call
+in `Gathering:OnLoot`. `Logic/Fishing.lua`: `Fishing:OnLoot` adds a
+`kind = "fish"` spot. `Logic/Respawn.lua`: `Respawn:Gathered` skips fish
+spots and reads `spot.also`. Saved: spots' `items` and `also` (never rename
+them). Test `tools/test_mapicons.lua`.
+
+**Sync rule: Blend.** Forever changes to map markers, spots or grow-back
+times go on top of Retail's version, keeping the item icons, the fish
+spots (never teaching a grow-back time) and the 3 m join. Never take
+Forever's `AddSpot` or `DrawWorld` whole.
+
+## 8. Releases and versions (PRs #7, #8)
+
+- `tools/check_release.py`: `FOREVER_PROJECT` refuses a tag whose TOC names
+  1710618 (and `tools/test_check_release.py`).
+- `README.md`: the Releasing table names 1763183.
+- Versions are Retail's own: 0.46.0 was the first. `Core/Init.lua`'s
+  `ns.RELEASED_VERSION`, `CHANGELOG.md`, `NEWS.md` and
+  `Core/WhatsNewText.lua` carry Retail's sections.
+- No Discord posts for Retail for now: the Discord secrets stay unset.
+
+**Sync rule: Keep Retail.** Never take Forever's `RELEASED_VERSION`,
+CHANGELOG, NEWS or What's New sections; a Forever feature that comes over
+gets its own Retail CHANGELOG line at the next Retail release. Blend any
+other fix to `check_release.py`.
+
+## 9. Notes
+
+`CLAUDE.md`: the "This repo is the Retail copy" section, "Area loot counts
+every corpse (Retail)" and "Levels that follow you (Retail)".
+
+**Sync rule: Blend.** Take Forever's new and changed sections, keep the
+Retail ones, and move "Last caught up to" to the new Forever commit.
