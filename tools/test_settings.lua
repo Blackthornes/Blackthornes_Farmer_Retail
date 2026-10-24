@@ -94,9 +94,19 @@ suite.check("the tally box writes the /farm tracker setting", ns.db.trackerHidde
 Toggle(controls.tracker)
 suite.check("and back", ns.db.trackerHidden == false)
 
-Toggle(controls.debug)
-suite.check("debug output", ns.db.debug == true)
-Toggle(controls.debug)
+-- Debug and the checks are typed only (the owner, 2026-10-23).
+suite.check("there is no debug box", controls.debug == nil)
+suite.check("nor a check button", controls.arrowCheck == nil and controls.sparkleCheck == nil
+    and controls.harvestCheck == nil and controls.gatheringCheck == nil)
+ns.HandleSlash("debug")
+suite.check("/farm debug turns debug output on", ns.db.debug == true)
+ns.HandleSlash("debug off")
+suite.check("and /farm debug off turns it off", ns.db.debug == false)
+local helpListsDebug = false
+for _, name in ipairs(ns.commandOrder) do
+    if name == "debug" then helpListsDebug = true end
+end
+suite.check("help does not list it", not helpListsDebug)
 
 suite.check("the sister addons box starts ticked", controls.sisters:GetChecked())
 Toggle(controls.sisters)
@@ -190,7 +200,7 @@ end
 suite.check("an empty search lights nothing", lit == 0)
 
 -- Text size, saved as a word, waits for a reload.
-controls.textSize.plus:GetScript("OnClick")(controls.textSize.plus)
+controls.textSize:Pick(controls.textSize:GetValue() + 1)
 suite.check("Text size saves Large", ns.db.textSize == "large")
 suite.check("and offers Reload", controls.textSize.reload:IsShown())
 suite.check("under the stepper, at its right edge", controls.textSize.reload._point[1] == "TOPRIGHT"
@@ -199,7 +209,7 @@ suite.check("under the stepper, at its right edge", controls.textSize.reload._po
 suite.check("the Window style's Reload sits the same way", controls.windowStyle.reload._point[1] == "TOPRIGHT"
     and controls.windowStyle.reload._point[2] == controls.windowStyle
     and controls.windowStyle.reload._point[3] == "BOTTOMRIGHT")
-controls.textSize.minus:GetScript("OnClick")(controls.textSize.minus)
+controls.textSize:Pick(controls.textSize:GetValue() - 1)
 suite.check("back to Normal needs no reload", ns.db.textSize == "normal"
     and not controls.textSize.reload:IsShown())
 
@@ -209,7 +219,6 @@ local realSlash = ns.HandleSlash
 ns.HandleSlash = function(text) ran[#ran + 1] = text end
 local buttons = {
     rankings = "rankings", lootTable = "loot",
-    harvestCheck = "harvest check", gatheringCheck = "gathering check",
     goals = "goals", goalsDock = "goals dock", arrowNext = "arrow next",
     shareSync = "share sync",
     shareGive = "give",
@@ -219,9 +228,11 @@ local buttons = {
     rankUpShow = "rankup show",
     xpBarTry = "xpbar try",
     topFarmTry = "topfarm test",
-    openTest = "openbutton test",
+    lootFeedMove = "lootfeed move",
+    lootFeedReset = "lootfeed reset",
     xpBarReset = "xpbar reset",
     statsTab = "charts",
+    killGoal = "killgoal", killGoalSummary = "killgoal summary",
 }
 local wrong = {}
 for key, command in pairs(buttons) do
@@ -249,8 +260,8 @@ end
 -- above, a control that writes the same setting, or the window itself.
 local covered = {
     settings = true, tracker = true, worlddrops = true, report = true, celebrate = true,
-    raresound = true, voice = true, effects = true, markers = true, tooltip = true, killcount = true, sparkle = true, questcount = true, plates = true,
-    arrow = true, grind = true, trash = true, opennote = true, bagsfull = true, export = true, sisters = true, skinning = true, hide = true, unhide = true,
+    raresound = true, voice = true, effects = true, markers = true, heat = true, tooltip = true, killcount = true, sparkle = true, questcount = true, plates = true, numbers = true,
+    seethrough = true, transparent = true, arrow = true, openbutton = true, grind = true, trash = true, opennote = true, bagsfull = true, export = true, sisters = true, skinning = true, hide = true, unhide = true,
 }
 for _, command in pairs(buttons) do covered[command:match("^(%S*)")] = true end
 -- Chat-only commands are typed only (the owner, 2026-10-15): the ones that
@@ -258,6 +269,8 @@ for _, command in pairs(buttons) do covered[command:match("^(%S*)")] = true end
 local chatOnly = {
     kills = true, value = true, fishing = true, where = true, goal = true,
     help = true, chat = true, stats = true, data = true, list = true,
+    -- The checks too (the owner, 2026-10-23).
+    harvest = true, gathering = true,
 }
 local missing = {}
 for _, name in ipairs(ns.commandOrder) do
@@ -415,9 +428,11 @@ suite.check("no control on the page clears recorded loot",
 
 local hint = SettingsUI.exportHint
 local exportButton = hint._point[2]
--- 310 is a settings column's width.
+-- A settings column's width, 310 or more when the switch along the top
+-- makes the window wider.
+local columnWidth = SettingsUI.pages.opts.columnWidth
 suite.check("the export hint is kept to its column beside the button",
-    exportButton:GetWidth() + 8 + hint:GetWidth() <= 310, hint:GetWidth())
+    exportButton:GetWidth() + 8 + hint:GetWidth() <= columnWidth, hint:GetWidth())
 suite.check("and has room for its text on two lines",
     ns.Theme.TextWidth("tiny", hint:GetText()) <= 2 * hint:GetWidth(), hint:GetText())
 
@@ -439,5 +454,54 @@ SettingsUI.optionsPanel = nil
 ok, result = pcall(SettingsUI.RegisterGameOptions, SettingsUI)
 suite.check("an options API that raises is not an error either", ok and result == false, result)
 _G.Settings = nil
+
+-- A gap below the item above is a step down: a positive one moved the
+-- About page's share box up over the Butler line (2026-10-17).
+do
+    local file = io.open("UI/Settings.lua", "r")
+    local source = file and file:read("*a") or ""
+    if file then file:close() end
+    local upward = {}
+    for gap in source:gmatch("pages:Place%b(),?") do
+        local n = gap:match(",%s*(%-?%d+)%)$")
+        if n and tonumber(n) > 0 then upward[#upward + 1] = gap end
+    end
+    suite.check("no setting is placed above the one before it", #upward == 0,
+        table.concat(upward, " "))
+end
+
+--------------------------------------------------------------------------------
+-- Even +/- boxes and no empty strip on the right (2026-10-22)
+--------------------------------------------------------------------------------
+
+do
+    local pages = SettingsUI.pages
+    local opts = pages.opts
+    local columns = opts.padding * 2 + opts.columnWidth * 2 + opts.columnGap
+    suite.check("the two columns reach the switch's width, with no strip left over",
+        columns >= pages:BarWidth() - 1, columns .. " vs " .. pages:BarWidth())
+    suite.check("the second column starts after the first",
+        pages.columnX[2] == opts.padding + opts.columnWidth + opts.columnGap, pages.columnX[2])
+
+    local widths, count = {}, 0
+    local seen = {}
+    for _, control in pairs(SettingsUI.controls) do
+        if type(control) == "table" and control.SetValue and control.GetWidth
+            and rawget(control, "value") ~= nil and not seen[control] then
+            seen[control] = true
+            count = count + 1
+            widths[math.floor(control:GetWidth() + 0.5)] = true
+        end
+    end
+    local kinds = 0
+    for _ in pairs(widths) do kinds = kinds + 1 end
+    suite.check("every +/- box and drop-down on the pages is one width", count > 0 and kinds == 1, count .. " boxes, " .. kinds .. " widths")
+
+    local made = SettingsUI.EvenSteppers({
+        { w = 100, GetWidth = function(s) return s.w end, SetWidth = function(s, w) s.w = w end },
+        { w = 160, GetWidth = function(s) return s.w end, SetWidth = function(s, w) s.w = w end },
+    }, 140)
+    suite.check("the widest wins, kept inside the column", made == 140, made)
+end
 
 suite.done()

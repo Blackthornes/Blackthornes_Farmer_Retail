@@ -52,6 +52,21 @@ fire(ns.eventFrame, "LOOT_OPENED")
 fire(ns.eventFrame, "LOOT_CLOSED")
 suite.check("a pick pocket is not a kill", Kills(DEFIAS) == 0, Kills(DEFIAS))
 suite.check("nor a harvested corpse", Harvest.opened[GUID] == nil)
+suite.check("its item goes in the session's loot", Tracker.sessionLoot[POCKET.name] == 1,
+    Tracker.sessionLoot[POCKET.name])
+suite.check("from the mob you picked", Tracker.sessionFrom[POCKET.name]
+    and Tracker.sessionFrom[POCKET.name][DEFIAS] == 1)
+
+-- 1b. A pocket with coin: the coin is yours too, and counted once.
+local coinBefore = Tracker.sessionCopper
+clock = clock + 30
+fire(ns.eventFrame, "UNIT_SPELLCAST_SENT", "player", DEFIAS, "Cast-2", 921)
+Window(GUID, { { name = "12 Copper", money = true } })
+fire(ns.eventFrame, "LOOT_OPENED")
+fire(ns.eventFrame, "LOOT_CLOSED")
+suite.check("pocket coin counts", Tracker.sessionCopper - coinBefore == 12,
+    Tracker.sessionCopper - coinBefore)
+suite.check("still no kill", Kills(DEFIAS) == 0, Kills(DEFIAS))
 
 -- 2. The same mob killed and looted later: a kill, with its own drop.
 clock = clock + 30
@@ -143,17 +158,14 @@ suite.check("a long one goes small", GoalsUI.NameSize(("x"):rep(30), 200) == "sm
 suite.check("a longer one tiny", GoalsUI.NameSize(("x"):rep(38), 200) == "tiny")
 Theme.TextWidth = baseWidth
 
--- 10. The Settings arrow Check keeps its result for "read the probe".
+-- 10. The arrow check is typed only now (the owner, 2026-10-23) and still
+-- keeps its result for "read the probe".
 local kept
 local baseKeep = ns.KeepCheck
 ns.KeepCheck = function(name) kept = name end
-ns.SettingsUI:Show()
-local button = ns.SettingsUI.controls and ns.SettingsUI.controls.arrowCheck
-local click = button and button:GetScript("OnClick")
-if click then click(button) end
-ns.SettingsUI:Hide()
+ns.HandleSlash("arrow check")
 ns.KeepCheck = baseKeep
-suite.check("the Check button keeps the check", kept == "arrow check", tostring(kept))
+suite.check("/farm arrow check keeps the check", kept == "arrow check", tostring(kept))
 
 local UI = ns.UI
 UI:Build()

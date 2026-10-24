@@ -433,6 +433,11 @@ function Gathering:Record(zone, location, node, kind, items, quantities, coords)
         entry.coords = { coords[1], coords[2] }
     end
 
+    -- Made with Bountiful Harvest: noted beside the record, so it never
+    -- reaches anyone's rates (Logic/Legacy.lua).
+    local boost = ns.Legacy and ns.Legacy:GatherBoost(kind)
+    if boost then ns.Legacy.Note(entry, "gathers", items, quantities, boost) end
+
     -- How long it took, for the Grind tab's worth an hour. Only herbs and
     -- veins: a chest opened between two herbs is not part of their pace.
     if ns.GrindGather and (kind == "herb" or kind == "ore") then ns.GrindGather:NoteGather(zone, node, items, quantities) end
@@ -917,7 +922,7 @@ local function PrintNode(summary)
     for _, item in ipairs(summary.items) do
         local right = summary.rated and ns.Tracker.FormatChance(item.chance)
             or L.Format("%d of %d", item.gathers, summary.gathers)
-        ns.PrintRaw(("  %s %s"):format(item.name, Util.Colored("muted", right)))
+        ns.PrintRaw(("  %s %s"):format(Util.ColorItem(item.name, item.id), Util.Colored("muted", right)))
     end
 
     if not summary.rated then
@@ -953,7 +958,10 @@ ns.RegisterCommand("gathering", L["herbs and ore you've gathered in this zone (a
     local argument = Util.Trim(rest):lower()
 
     if argument == "check" then
-        ns.KeepCheck("gathering check", PrintSuspects)
+        ns.KeepCheck("gathering check", function()
+            PrintSuspects()
+            if ns.Legacy then ns.Print(ns.Legacy:CheckLine()) end
+        end)
         return
     end
 

@@ -67,6 +67,7 @@ local function Stub(fields)
     function frame:UnregisterEvent(event) self._events[event] = nil end
 
     function frame:CreateTexture() return Stub() end
+    function frame:CreateLine() return Stub() end
     function frame:CreateFontString() return Stub() end
 
     function frame:SetMinMaxValues(low, high) self._min, self._max = low, high end
@@ -232,7 +233,7 @@ function env.InstallWorld()
     _G.GetLootSlotLink = function(slot)
         local item = world.loot[slot]
         if not item or not item.id then return nil end
-        return ("|cffffffff|Hitem:%d::::::::25::::|h[%s]|h|r"):format(item.id, item.name)
+        return ("|c%s|Hitem:%d::::::::25::::|h[%s]|h|r"):format(item.color or "ffffffff", item.id, item.name)
     end
 
     -- Coins come out of a loot window in a slot of their own, alongside the
@@ -306,6 +307,10 @@ end
 local FILES = {
     "Locale/Locale.lua",
     "Locale/deDE.lua",
+    "Locale/zhCN.lua",
+    "Locale/frFR.lua",
+    "Locale/esES.lua",
+    "Locale/ruRU.lua",
     "Core/Init.lua",
     "Core/Util.lua",
     "Core/SisterNote.lua",
@@ -316,16 +321,23 @@ local FILES = {
     "Data/NpcNames.lua",
     "Data/ForeverNpcNames.lua",
     "Data/Zones.lua",
+    "Data/Travel.lua",
+    "Data/TravelZones.lua",
     "Data/Data_Mining.lua",
     "Data/Data_Herbalism.lua",
     "Data/Data_Cloth.lua",
     "Data/Data_Leather.lua",
     "Data/Data_Misc.lua",
     "Data/Data_MobDrops.lua",
+    "Data/Data_ClassicDrops.lua",
     "Data/Harvest_Carryover.lua",
     "Logic/Search.lua",
+    "Logic/Looted.lua",
+    "Logic/Legacy.lua",
     "Logic/Harvest.lua",
     "Logic/Tracker.lua",
+    "Logic/Heat.lua",
+    "Logic/GameNumbers.lua",
     "Logic/Fishing.lua",
     "Logic/Gathering.lua",
     "Logic/Containers.lua",
@@ -339,17 +351,22 @@ local FILES = {
     "Logic/Session.lua",
     "Logic/XP.lua",
     "Logic/Stats.lua",
+    "Logic/KillGoal.lua",
     "Logic/Moments.lua",
     "Logic/Butler.lua",
     "Logic/Pace.lua",
+    "Logic/DisenchantFarm.lua",
     "Logic/Spots.lua",
     "Logic/Arrow.lua",
     "Logic/TomTom.lua",
+    "Logic/Travel.lua",
     "Logic/Grinding.lua",
     "Logic/GrindGather.lua",
+    "Logic/GatherToCap.lua",
     "Logic/Share.lua",
     "Logic/Transfer.lua",
     "Logic/GuildShare.lua",
+    "Logic/Contribute.lua",
     "Logic/CSV.lua",
 }
 
@@ -363,7 +380,9 @@ local UI_FILES = {
     "UI/Theme.lua",
     "UI/BlizzardLook.lua",
     "UI/Widgets.lua",
+    "UI/SeeThrough.lua",
     "UI/Titanforged.lua",
+    "UI/FoldWindow.lua",
     "UI/About.lua",
     "UI/WhatsNew.lua",
     "UI/SettingsPages.lua",
@@ -377,11 +396,17 @@ local UI_FILES = {
     "UI/Rankings.lua",
     "UI/RankUp.lua",
     "UI/Recap.lua",
+    "UI/KillGoal.lua",
     "UI/Grinding.lua",
+    "UI/GatherToCap.lua",
     "UI/Stats.lua",
     "UI/MapMarkers.lua",
+    "UI/Heat.lua",
     "UI/GrindPins.lua",
     "UI/Arrow.lua",
+    "UI/TravelCard.lua",
+    "UI/TravelMap.lua",
+    "UI/TooltipShift.lua",
     "UI/ItemTooltip.lua",
     "UI/KillTooltip.lua",
     "UI/NodeSparkle.lua",
@@ -392,6 +417,7 @@ local UI_FILES = {
     "UI/HiddenWindow.lua",
     "UI/Trash.lua",
     "UI/OpenNote.lua",
+    "UI/LootFeed.lua",
     "UI/OpenButton.lua",
     "UI/BagsFull.lua",
     "UI/Veil.lua",
@@ -411,7 +437,24 @@ env.FOREVER_DATA = {
     ["Data/Data_Misc.lua"] = true,
     ["Data/Data_MobDrops.lua"] = true,
     ["Data/Harvest_Carryover.lua"] = true,
+    ["Data/Data_ClassicDrops.lua"] = true,
     ["Data/Data_Harvested.lua"] = true,
+}
+
+--- Forever's features the Retail TOC leaves out: drop sending and Legacy
+--- perks are Forever only, and Guide Me and Gather to cap are built on the
+--- Classic world (its boats and zeppelins, its 1 to 300 skill ladder).
+--- `opts.retail` loads without them too.
+env.RETAIL_LEFT_OUT = {
+    ["Logic/Contribute.lua"] = true,
+    ["Logic/Legacy.lua"] = true,
+    ["Data/Travel.lua"] = true,
+    ["Data/TravelZones.lua"] = true,
+    ["Logic/Travel.lua"] = true,
+    ["UI/TravelCard.lua"] = true,
+    ["UI/TravelMap.lua"] = true,
+    ["Logic/GatherToCap.lua"] = true,
+    ["UI/GatherToCap.lua"] = true,
 }
 
 --- Is there a generated harvest file to load?
@@ -424,10 +467,24 @@ end
 
 --- Load the addon exactly as the TOC does, and return its namespace.
 --- `opts.locale` ("deDE") loads it as a client in that language would.
+--- `opts.unknownEvents` ({ LOOT_CLOSED = true }) loads it on a client that
+--- refuses those events, as Forever does for any event it does not know.
 function env.Load(opts)
     opts = opts or {}
 
     env.InstallClient()
+    if opts.unknownEvents then
+        local unknown, create = opts.unknownEvents, _G.CreateFrame
+        _G.CreateFrame = function(...)
+            local frame = create(...)
+            local register = frame.RegisterEvent
+            frame.RegisterEvent = function(self, event, ...)
+                if unknown[event] then error("unknown event " .. event) end
+                return register(self, event, ...)
+            end
+            return frame
+        end
+    end
     if opts.locale then
         local locale = opts.locale
         _G.GetLocale = function() return locale end
@@ -441,13 +498,15 @@ function env.Load(opts)
     end
 
     for _, file in ipairs(FILES) do
-        if not (opts.retail and env.FOREVER_DATA[file]) then Run(file) end
+        if not (opts.retail and (env.FOREVER_DATA[file] or env.RETAIL_LEFT_OUT[file])) then Run(file) end
     end
 
     if opts.harvested and not opts.retail and env.HasHarvested() then Run(HARVESTED) end
 
     if opts.ui then
-        for _, file in ipairs(UI_FILES) do Run(file) end
+        for _, file in ipairs(UI_FILES) do
+            if not (opts.retail and env.RETAIL_LEFT_OUT[file]) then Run(file) end
+        end
     end
 
     -- ADDON_LOADED installs saved variables; tests that skip the event loop

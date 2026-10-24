@@ -4,8 +4,8 @@
 --   Kills: 7/20                         (red, until drop rates unlock)
 --   Kills: 134, worth 1s 20c each       (from 20 kills on)
 --
---   Best drops                          (gold; "Best drops (est.)" from
---   Linen Cloth 41%              52c     the database's rates)
+--   Best drops                          (gold; from 20 kills on, from
+--   Linen Cloth 41%              52c     the player's own rates only)
 --
 -- Under it, the three drops that add most to a kill's worth: how often each
 -- drops times its price, the same entries Value:ForMob adds up, so they come
@@ -33,6 +33,12 @@ local L = ns.L
 local KillTooltip = ns.NewModule("KillTooltip")
 
 local TOOLTIP_NAMES = { "GameTooltip", "ItemRefTooltip" }
+
+-- Off, Shift or Always for each line (UI/TooltipShift.lua): "killCount" is
+-- the count with its marks and the greens line, "bestDrops" the best drops.
+local Shift = ns.TooltipShift
+table.insert(Shift.KEYS, "killCount")
+table.insert(Shift.KEYS, "bestDrops")
 
 -- A unit's tooltip is redrawn over and over while the mouse rests on it, so
 -- a mob's worth is kept this long, as long as its kill count stays the same.
@@ -181,11 +187,26 @@ function KillTooltip:MobName(unit, guid)
     return ns.Harvest.KnownNpcName(npcID) or ("Creature #%d"):format(npcID)
 end
 
---- Kills of a mob from the saved tally, 0 for one never killed.
-function KillTooltip.Kills(name)
-    local mobs = ns.db and type(ns.db.tracker) == "table" and ns.db.tracker.mobs
-    local mob = type(mobs) == "table" and mobs[name]
+--- Kills of a mob's line from the saved tally, 0 for one never killed. A
+--- name split by zone answers through its zone's key (Tracker:KeyHere).
+function KillTooltip.Kills(key)
+    local mob
+    if ns.Tracker and ns.Tracker.SplitKey and select(2, ns.Tracker.SplitKey(key)) then
+        mob = ns.Tracker:Tally(key)
+    else
+        local mobs = ns.db and type(ns.db.tracker) == "table" and ns.db.tracker.mobs
+        mob = type(mobs) == "table" and mobs[key]
+    end
     return type(mob) == "table" and tonumber(mob.kills) or 0
+end
+
+--- The line a mob of this name shows here: its name, or the zone's key
+--- once kills of that name are kept apart by zone.
+function KillTooltip.KeyHere(name)
+    local Tracker = ns.Tracker
+    if not (Tracker and Tracker.KeyHere) then return name end
+    local ok, key = pcall(Tracker.KeyHere, Tracker, name)
+    return ok and key or name
 end
 
 --- Is this something you would farm? A creature you can attack, not
@@ -241,6 +262,8 @@ local function ItemLook(name, id)
             end
         end
     end
+    -- Not loaded yet: asked for, so the next read has it.
+    color = color or ns.Util.ItemHex(name, id)
     return color or ns.Tracker.QUALITY[1], icon
 end
 
@@ -270,7 +293,9 @@ function KillTooltip:Read(name, kills)
 
         -- Already sorted by what each adds to a kill. A drop worth under
         -- half a copper a kill is not one of the best, whatever its place.
-        local priced = type(details) == "table" and details.priced or {}
+        -- Rates from the shipped data stay hidden until the player has kills
+        -- enough for their own (the owner, 2026-10-15): finding them is the fun.
+        local priced = type(details) == "table" and not entry.estimate and details.priced or {}
         for _, drop in ipairs(priced) do
             if #entry.drops >= KillTooltip.TOP_DROPS then break end
             if (tonumber(drop.perKill) or 0) >= 0.5 then
@@ -361,6 +386,7 @@ function KillTooltip:Decorate(tooltip, data)
     local name = self:MobName(unit, guid)
     if not name then return "nounit" end
     if ns.DB and ns.DB:IsHiddenSource(name) then return "quiet" end
+    name = KillTooltip.KeyHere(name)
 
     -- A mob you could farm, or one you already have.
     if KillTooltip.Kills(name) == 0 and self:Attackable(unit) ~= true then return "quiet" end
@@ -375,31 +401,42 @@ function KillTooltip:Decorate(tooltip, data)
     local crown = KillTooltip.Crown(KillTooltip.Kills(name))
     if crown then text = text .. " " .. crown end
 
+    -- A line on Shift waits for Shift, asked each time the tooltip is built.
+    local countShows = Shift:Shows("killCount")
+    local held = not countShows
+
     self.writing = true
-    pcall(addLine, tooltip, text, r, g, b)
-    -- The marks of the milestones: its name known at 250, Slayer at 500,
-    -- Bane at 1000 in legendary orange; from 750 a live one trembles.
-    local mark, mr, mg, mb = KillTooltip.MarkLine(KillTooltip.Kills(name))
-    if mark then pcall(addLine, tooltip, mark, mr, mg, mb) end
-    if KillTooltip.Kills(name) >= ns.Tracker.FEAR_KILLS and KillTooltip.Alive(unit) then
-        pcall(addLine, tooltip, L["It trembles at the sight of you."], 0.8, 0.6, 0.95)
+    if countShows then
+        pcall(addLine, tooltip, text, r, g, b)
+        -- The marks of the milestones: its name known at 250, Slayer at 500,
+        -- Bane at 1000 in legendary orange; from 750 a live one trembles.
+        local mark, mr, mg, mb = KillTooltip.MarkLine(KillTooltip.Kills(name))
+        if mark then pcall(addLine, tooltip, mark, mr, mg, mb) end
+        if KillTooltip.Kills(name) >= ns.Tracker.FEAR_KILLS and KillTooltip.Alive(unit) then
+            pcall(addLine, tooltip, L["It trembles at the sight of you."], 0.8, 0.6, 0.95)
+        end
     end
     -- The drops that add most to a kill.
     if self:DropsEnabled() then
         local drops, estimate = self:Drops(name, KillTooltip.Kills(name))
         local addDouble = Field(tooltip, "AddDoubleLine")
         if #drops > 0 and type(addDouble) == "function" then
-            local gr, gg, gb = Color("accentHi", GOLD)
-            pcall(addLine, tooltip, estimate and L["Best drops (est.)"] or L["Best drops"], gr, gg, gb)
-            for _, drop in ipairs(drops) do
-                pcall(addDouble, tooltip, drop[1], drop[2], 1, 1, 1, 1, 1, 1)
+            if Shift:Shows("bestDrops") then
+                local gr, gg, gb = Color("accentHi", GOLD)
+                pcall(addLine, tooltip, estimate and L["Best drops (est.)"] or L["Best drops"], gr, gg, gb)
+                for _, drop in ipairs(drops) do
+                    pcall(addDouble, tooltip, drop[1], drop[2], 1, 1, 1, 1, 1, 1)
+                end
+            else
+                held = true
             end
         end
     end
     -- The chance of green gear from a mob of its level (Logic/WorldDrops.lua),
-    -- only once that level has kills enough behind it.
-    local greens = self:GreensLine(unit)
+    -- only once that level has kills enough behind it. It goes with the count.
+    local greens = countShows and self:GreensLine(unit)
     if greens then pcall(addLine, tooltip, greens, 0.12, 1, 0) end
+    if held then Shift:Held(tooltip) end
     local show = Field(tooltip, "Show")
     if type(show) == "function" then pcall(show, tooltip) end
     self.writing = false

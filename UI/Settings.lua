@@ -32,6 +32,8 @@ local COLUMN_GAP = 18
 -- Where the controls start: room for a label like "Kills and Loot Size:" in the
 -- game's font, which runs wider than it looks.
 local CONTROL_X = 170
+-- As set above; FillBar may widen both to meet the switch along the top.
+local BASE_COLUMN_WIDTH, BASE_CONTROL_X = COLUMN_WIDTH, CONTROL_X
 
 -- Window sizes, in percent. Wide enough to matter on a 4K screen or a laptop,
 -- narrow enough that neither end breaks the layout.
@@ -55,7 +57,7 @@ local PAGES = {
     { key = "sharing", text = L["SHARING"],
       tip = L["Share kills, drop rates and gathering with your other account"] },
     { key = "advanced", text = L["ADVANCED"],
-      tip = L["Debug, the sister addons and What's New"] },
+      tip = L["The sister addons and What's New"] },
     { key = "about", text = L["ABOUT"],
       tip = L["How these addons are made, the version, the Discord and the other Blackthornes addons"] },
 }
@@ -89,6 +91,37 @@ local function CommandButton(row, text, command, width, x)
 end
 
 --- A row whose button runs a /farm command.
+--- A "Transparent:" drop-down for one panel (UI/SeeThrough.lua): Off, Some,
+--- More or Most clear.
+local function SeeThroughRow(pages, page, column, id, label, description)
+    local row = pages:Row(page, column, label, description)
+    local names = ns.SeeThrough.Names()
+    local stepper = Widgets.CreateChoice(row, {
+        min = 0, max = #ns.SeeThrough.LEVELS, step = 1, value = 0,
+        format = function(index) return names[index] end,
+        onChange = function(index) ns.SeeThrough:Set(id, index) end,
+    })
+    ns.SettingsPages.FitStepper(stepper, { names[0], names[1], names[2], names[3] })
+    stepper:SetPoint("TOPLEFT", CONTROL_X, -2)
+    return stepper
+end
+
+--- An Off, Shift or Always drop-down for one tooltip line (UI/TooltipShift.lua).
+--- `isOn()` reads the line's own setting and `setOn(on)` is its old tick box.
+local function TooltipShiftStepper(row, key, isOn, setOn)
+    local Shift = ns.TooltipShift
+    local names = Shift.NAMES
+    local stepper = Widgets.CreateChoice(row, {
+        min = 0, max = 2, step = 1, value = Shift:Mode(isOn(), key),
+        format = function(index) return names[index] end,
+        onChange = function(index) Shift:Apply(index, key, isOn(), setOn) end,
+    })
+    ns.SettingsPages.FitStepper(stepper, { names[0], names[1], names[2] })
+    stepper:SetPoint("TOPLEFT", CONTROL_X, -2)
+    stepper.shiftKey, stepper.isOn = key, isOn
+    return stepper
+end
+
 local function CommandRow(pages, page, column, label, description, buttonText, command)
     local row = pages:Row(page, column, label, description)
     return row, CommandButton(row, buttonText, command)
@@ -208,6 +241,10 @@ function SettingsUI:ResetPositions()
         db[key] = defaults[key]
     end
 
+    -- The search window's kept width goes too; the tabs grow it again from
+    -- the next login, as wide as they need (UI:Claim).
+    db.windowWidth = nil
+
     -- This window too: it goes back to the middle of the screen.
     db.settingsPoint = nil
     db.settingsRelativePoint = nil
@@ -237,6 +274,9 @@ function SettingsUI:ResetPositions()
     -- The goals panel goes back under the kills panel.
     if ns.GoalsUI and ns.GoalsUI.frame then ns.GoalsUI:Dock() end
 
+    -- The loot feed goes back to its first place and size.
+    if ns.LootFeed then ns.LootFeed:ResetPlace() end
+
     -- The goal arrow goes back to the top middle.
     if ns.ArrowUI then ns.ArrowUI:ResetPosition() end
 
@@ -246,6 +286,40 @@ end
 --------------------------------------------------------------------------------
 -- Construction
 --------------------------------------------------------------------------------
+
+
+--- When the switch along the top is wider than the two columns, the
+--- columns grow to meet it, so no empty strip is left down the right
+--- (2026-10-22). Half the room goes to the labels, half to the controls.
+function SettingsUI:FillBar()
+    local pages = self.pages
+    if not (pages and pages.BarWidth) then return end
+    COLUMN_WIDTH, CONTROL_X = BASE_COLUMN_WIDTH, BASE_CONTROL_X
+    local natural = PADDING * 2 + COLUMN_WIDTH * 2 + COLUMN_GAP
+    local ok, bar = pcall(pages.BarWidth, pages)
+    if not ok or type(bar) ~= "number" or bar <= natural then return end
+    local grow = math.floor((bar - natural) / 2)
+    COLUMN_WIDTH = COLUMN_WIDTH + grow
+    CONTROL_X = CONTROL_X + math.floor(grow / 2)
+    pages.opts.columnWidth = COLUMN_WIDTH
+    pages.opts.controlX = CONTROL_X
+    pages.columnX[2] = PADDING + COLUMN_WIDTH + COLUMN_GAP
+end
+
+--- Give every stepper the widest one's width, never past `room`.
+function SettingsUI.EvenSteppers(steppers, room)
+    local widest = 0
+    for _, stepper in ipairs(steppers) do
+        local width = stepper.GetWidth and stepper:GetWidth()
+        if type(width) == "number" and width > widest then widest = width end
+    end
+    if widest <= 0 then return end
+    if type(room) == "number" and room > 0 then widest = math.min(widest, room) end
+    for _, stepper in ipairs(steppers) do
+        if stepper.SetWidth then stepper:SetWidth(widest) end
+    end
+    return widest
+end
 
 function SettingsUI:Build()
     if self.frame then return self.frame end
@@ -307,13 +381,34 @@ function SettingsUI:Build()
         controlX = CONTROL_X,
         db = function() return ns.db end,
     })
-    self:BuildWindowsPage()
-    self:BuildTallyPage()
-    self:BuildLootPage()
-    self:BuildMapPage()
-    self:BuildSharingPage()
-    self:BuildAdvancedPage()
-    self:BuildAboutPage()
+    self:FillBar()
+
+    -- Every +/- box and drop-down on every page comes out the same width,
+    -- the widest one's, so they line up down the page (2026-10-22).
+    local steppers = {}
+    local makeStepper, makeChoice = Widgets.CreateStepper, Widgets.CreateChoice
+    Widgets.CreateStepper = function(...)
+        local stepper = makeStepper(...)
+        steppers[#steppers + 1] = stepper
+        return stepper
+    end
+    Widgets.CreateChoice = function(...)
+        local choice = makeChoice(...)
+        steppers[#steppers + 1] = choice
+        return choice
+    end
+    local built, problem = pcall(function()
+        self:BuildWindowsPage()
+        self:BuildTallyPage()
+        self:BuildLootPage()
+        self:BuildMapPage()
+        self:BuildSharingPage()
+        self:BuildAdvancedPage()
+        self:BuildAboutPage()
+    end)
+    Widgets.CreateStepper, Widgets.CreateChoice = makeStepper, makeChoice
+    if not built then error(problem, 0) end
+    SettingsUI.EvenSteppers(steppers, COLUMN_WIDTH - CONTROL_X)
     self.pages:Fit()
 
     -- The house size grip under the bottom right corner
@@ -447,6 +542,32 @@ function SettingsUI:BuildWindowsPage()
     reset:SetPoint("TOPLEFT", CONTROL_X, 0)
     controls.resetPositions = reset
 
+    -- Every panel that stays on screen can let the world show through, all
+    -- in one place (the owner, 2026-10-17). The glass comes back while the
+    -- mouse is on a panel. The saved keys keep their see-through names.
+    pages:Section("windows", 1, L["TRANSPARENT"])
+
+    local trackerRow = pages:Row("windows", 1, L["Kills & Loot:"],
+        L["Lets the world show through the panel. It goes dark again while your mouse is on it."])
+    local names = ns.SeeThrough.Names()
+    controls.seeThrough = Widgets.CreateChoice(trackerRow, {
+        min = 0, max = #ns.TrackerUI.SEE_THROUGH_LEVELS, step = 1, value = 0,
+        format = function(index) return names[index] end,
+        onChange = function(index)
+            if index > 0 then ns.TrackerUI:SetSeeThroughLevel(index) end
+            ns.TrackerUI:SetSeeThrough(index > 0)
+        end,
+    })
+    ns.SettingsPages.FitStepper(controls.seeThrough, { names[0], names[1], names[2], names[3] })
+    controls.seeThrough:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    controls.goalsSeeThrough = SeeThroughRow(pages, "windows", 1, "goals", L["Goals:"], nil)
+    controls.goalSpotsSeeThrough = SeeThroughRow(pages, "windows", 1, "places", L["Where to Farm:"], nil)
+    controls.rankUpSeeThrough = SeeThroughRow(pages, "windows", 1, "rankup", L["Top 15:"], nil)
+    controls.recapSeeThrough = SeeThroughRow(pages, "windows", 1, "recap", L["Run Recap:"], nil)
+    controls.xpBarSeeThrough = SeeThroughRow(pages, "windows", 1, "xpbar", L["XP Bar:"], nil)
+    controls.lootFeedSeeThrough = SeeThroughRow(pages, "windows", 1, "lootfeed", L["Loot Feed:"], nil)
+
     pages:Section("windows", 2, L["EFFECTS"])
 
     -- Every window and both panels follow it, so it sits with the windows
@@ -454,7 +575,7 @@ function SettingsUI:BuildWindowsPage()
     local effectsRow = pages:Row("windows", 2, L["Effects:"], nil)
 
     local FX = ns.TrackerFX
-    controls.effects = Widgets.CreateStepper(effectsRow, {
+    controls.effects = Widgets.CreateChoice(effectsRow, {
         min = 1, max = #FX.LEVELS, step = 1, value = #FX.LEVELS,
         format = function(index) return FX.LEVEL_NAMES[FX.LEVELS[index]] end,
         onChange = function(index) FX:SetLevel(FX.LEVELS[index]) end,
@@ -493,6 +614,14 @@ function SettingsUI:BuildWindowsPage()
     end, false)
     controls.rankingsOutside:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The owner, 2026-10-18: worth per kill without Uncommon and better drops.
+    local uncommonRow = pages:Row("windows", 2, L["Skip Uncommon Drops:"],
+        L["Worth per kill leaves out Uncommon, Rare and Epic drops."])
+    controls.rankingsSkipUncommon = Widgets.CreateCheckbox(uncommonRow, L["On"], function(checked)
+        ns.Rankings:SetSkipUncommon(checked)
+    end, false)
+    controls.rankingsSkipUncommon:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local _, statsButton = CommandRow(pages, "windows", 2, L["Stats:"], nil, L["Open"], "charts")
     controls.statsTab = statsButton
 end
@@ -501,16 +630,15 @@ end
 local WINDOW_STYLES = { "titanforged", "blizzard" }
 local WINDOW_STYLE_NAMES = { titanforged = "Titanforged", blizzard = "Blizzard" }
 
---- The Window style row's control: a stepper between Titanforged and
---- Blizzard (Farmer has no dropdown, and Text size beside it is a stepper
---- too), with Reload under it while the pick differs from what is
---- drawn. :Sync() reads the saved pick back.
+--- The Window style row's control: a drop-down of Titanforged and
+--- Blizzard, as Text size beside it is, with Reload under it while the
+--- pick differs from what is drawn. :Sync() reads the saved pick back.
 function SettingsUI:WindowStyleControl(row)
     local Look = ns.BlizzardLook
     local function Drawn() return Look and Look.Style() or "titanforged" end
 
     local reload
-    local stepper = Widgets.CreateStepper(row, {
+    local stepper = Widgets.CreateChoice(row, {
         min = 1, max = #WINDOW_STYLES, step = 1,
         format = function(value) return WINDOW_STYLE_NAMES[WINDOW_STYLES[value]] end,
         onChange = function(value)
@@ -745,12 +873,8 @@ function SettingsUI:BuildLootPage()
         L["Export"], "export csv")
     controls.exportCsv = csvButton
 
-    -- The chat-only lists stay typed commands (the owner, 2026-10-15); the
-    -- checks keep their buttons.
-    local _, lootCheckButton = CommandRow(pages, "loot", 1, L["Loot Check:"],
-        L["Lists in chat what Farmer can read from the next corpse you loot."],
-        L["Ready"], "harvest check")
-    controls.harvestCheck = lootCheckButton
+    -- The checks are typed only, as /farm harvest check (the owner,
+    -- 2026-10-23); the chat-only lists are too (2026-10-15).
 
     -- Without Tradeskills (the owner asked 2026-10-12).
     pages:Section("loot", 1, L["PRICES"])
@@ -773,11 +897,34 @@ function SettingsUI:BuildLootPage()
     end, true)
     controls.worldDrops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    pages:Section("loot", 2, L["FISHING AND GATHERING"])
+    -- The loot feed (a player asked, the owner said build it 2026-10-19).
+    pages:Section("loot", 1, L["LOOT FEED"])
 
-    local _, checkButton = CommandRow(pages, "loot", 2, L["Odd Gathers:"],
-        L["Lists in chat any gathers that look counted wrong."], L["Check"], "gathering check")
-    controls.gatheringCheck = checkButton
+    local feedRow = pages:Row("loot", 1, L["Loot Feed:"], nil)
+    controls.lootFeed = Widgets.CreateCheckbox(feedRow, L["On"], function(checked)
+        ns.LootFeed:SetEnabled(checked)
+    end, false)
+    controls.lootFeed:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local holdRow = pages:Row("loot", 1, L["Show For:"], nil)
+    local function Seconds(value) return L.Format("%d seconds", value) end
+    controls.lootFeedHold = Widgets.CreateStepper(holdRow, {
+        min = ns.LootFeed.HOLD_MIN, max = ns.LootFeed.HOLD_MAX, step = 1, value = ns.LootFeed.HOLD,
+        format = Seconds,
+        onChange = function(value) ns.LootFeed:SetHold(value) end,
+    })
+    ns.SettingsPages.FitStepper(controls.lootFeedHold, { Seconds(ns.LootFeed.HOLD_MAX) })
+    controls.lootFeedHold:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local worthRow = pages:Row("loot", 1, L["Show Worth:"], nil)
+    controls.lootFeedWorth = Widgets.CreateCheckbox(worthRow, L["On"], function(checked)
+        ns.LootFeed:SetShowsWorth(checked)
+    end, true)
+    controls.lootFeedWorth:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local placeRow = pages:Row("loot", 1, L["Feed Place:"], nil)
+    controls.lootFeedMove = CommandButton(placeRow, L["Move"], "lootfeed move", 70)
+    controls.lootFeedReset = CommandButton(placeRow, L["Reset"], "lootfeed reset", 70, CONTROL_X + 76)
 
     -- Drops only (a player asked, the owner agreed 2026-10-11).
     pages:Section("loot", 2, L["SKINNING"])
@@ -821,9 +968,8 @@ function SettingsUI:BuildLootPage()
         ns.OpenButton:SetEnabled(checked)
     end, true)
     controls.openButton:SetPoint("TOPLEFT", CONTROL_X, -2)
-    controls.openTest = CommandButton(openButtonRow, L["Test"], "openbutton test", 60, CONTROL_X + 70)
     local autoOpenRow = pages:Row("loot", 2, L["Open After Loot:"],
-        L["Opens the next clam, sack or lockbox each time you close a loot window. Needs Test to pass first."])
+        L["Opens the next clam, sack or lockbox each time you close a loot window."])
     controls.autoOpen = Widgets.CreateCheckbox(autoOpenRow, L["On"], function(checked)
         ns.OpenButton:SetAuto(checked)
     end, false)
@@ -862,25 +1008,34 @@ function SettingsUI:BuildMapPage()
     end, true)
     controls.nodeSparkle:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- Through the command, so the result is kept for "read the probe".
-    local sparkleCheck = Widgets.CreateButton(sparkleRow, L["Check"], function()
-        ns.HandleSlash("sparkle check")
-    end, { width = 60, height = 20 })
-    sparkleCheck:SetPoint("TOPRIGHT", sparkleRow, "TOPRIGHT", 0, 0)
-    controls.sparkleCheck = sparkleCheck
-
     -- Sparkles or a beacon, a beam of light rising off the spot (the owner
     -- asked 2026-10-13).
     local styleNames = { sparkles = L["Sparkles"], beacon = L["Beacon"] }
     local sparkleStyleRow = pages:Row("map", 1, L["Sparkle Look:"],
         L["Beacon is a beam of light. Sparkles twinkle instead."])
-    controls.sparkleStyle = Widgets.CreateStepper(sparkleStyleRow, {
+    controls.sparkleStyle = Widgets.CreateChoice(sparkleStyleRow, {
         min = 1, max = #ns.NodeSparkle.STYLES, step = 1, value = 1,
         format = function(index) return styleNames[ns.NodeSparkle.STYLES[index]] end,
         onChange = function(index) ns.NodeSparkle:SetStyle(ns.NodeSparkle.STYLES[index]) end,
     })
     ns.SettingsPages.FitStepper(controls.sparkleStyle, styleNames)
     controls.sparkleStyle:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Each thing in its own colour, herbs and ore by your skill, and a
+    -- corpse to skin (the owner, 2026-10-24).
+    local sparkleColorsRow = pages:Row("map", 1, L["Sparkle Colors:"],
+        L["Herbs and ore show your skill color. Quest things are blue. Chests, fish and your bobber are white."])
+    controls.nodeSparkleColors = Widgets.CreateCheckbox(sparkleColorsRow, L["On"], function(checked)
+        ns.NodeSparkle:SetColors(checked)
+    end, true)
+    controls.nodeSparkleColors:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local sparkleCorpsesRow = pages:Row("map", 1, L["Skinnable Corpses:"],
+        L["A dead beast you can skin sparkles until you skin it."])
+    controls.nodeSparkleCorpses = Widgets.CreateCheckbox(sparkleCorpsesRow, L["On"], function(checked)
+        ns.NodeSparkle:SetCorpses(checked)
+    end, true)
+    controls.nodeSparkleCorpses:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- The game's interact icon, out of sight without a controller (the
     -- owner asked 2026-10-13).
@@ -913,36 +1068,35 @@ function SettingsUI:BuildMapPage()
     local tooltipRow = pages:Row("map", 1, L["Where to Farm:"],
         L["Hover a material to see the best place to farm it."])
 
-    controls.itemTooltip = Widgets.CreateCheckbox(tooltipRow, L["Show"], function(checked)
-        ns.db.itemTooltip = checked
-        if ns.ItemTooltip then ns.ItemTooltip.ForgetKept() end
-    end, true)
-    controls.itemTooltip:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- Off, Shift or Always (2026-10-18): Shift shows it only while Shift is held.
+    controls.itemTooltip = TooltipShiftStepper(tooltipRow, "whereToFarm",
+        function() return ns.db.itemTooltip ~= false end,
+        function(on)
+            ns.db.itemTooltip = on
+            if ns.ItemTooltip then ns.ItemTooltip.ForgetKept() end
+        end)
 
     -- What crafting a material pays for your time, from Tradeskills
     -- (the owner said yes, 2026-10-15).
     local craftRow = pages:Row("map", 1, L["Craft or Sell:"],
         L["With Tradeskills, a material shows what an hour of farming it pays, sold or crafted."])
-    controls.itemTooltipCraft = Widgets.CreateCheckbox(craftRow, L["Show"], function(checked)
-        ns.ItemTooltip:SetCraftEnabled(checked)
-    end, true)
-    controls.itemTooltipCraft:SetPoint("TOPLEFT", CONTROL_X, -2)
+    controls.itemTooltipCraft = TooltipShiftStepper(craftRow, "craftOrSell",
+        function() return ns.db.itemTooltipCraft ~= false end,
+        function(on) ns.ItemTooltip:SetCraftEnabled(on) end)
 
     local killRow = pages:Row("map", 1, L["Kill Count:"],
         L["Hover a mob to see how many you've killed."])
 
-    controls.killTooltip = Widgets.CreateCheckbox(killRow, L["Show"], function(checked)
-        ns.KillTooltip:SetEnabled(checked)
-    end, true)
-    controls.killTooltip:SetPoint("TOPLEFT", CONTROL_X, -2)
+    controls.killTooltip = TooltipShiftStepper(killRow, "killCount",
+        function() return ns.db.killTooltip ~= false end,
+        function(on) ns.KillTooltip:SetEnabled(on) end)
 
     -- The three drops worth most a kill, under the count (2026-10-14).
     local dropsRow = pages:Row("map", 1, L["Best Drops:"],
         L["The three drops worth the most from a mob."])
-    controls.killTooltipDrops = Widgets.CreateCheckbox(dropsRow, L["Show"], function(checked)
-        ns.KillTooltip:SetDropsEnabled(checked)
-    end, true)
-    controls.killTooltipDrops:SetPoint("TOPLEFT", CONTROL_X, -2)
+    controls.killTooltipDrops = TooltipShiftStepper(dropsRow, "bestDrops",
+        function() return ns.db.killTooltipDrops ~= false end,
+        function(on) ns.KillTooltip:SetDropsEnabled(on) end)
 
     -- "3/8" beside a quest mob's name (the owner picked it 2026-10-13).
     local questCountRow = pages:Row("map", 1, L["Quest Count:"],
@@ -960,6 +1114,17 @@ function SettingsUI:BuildMapPage()
     end, true)
     controls.killPlates:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Where the count sits by the plate (a player asked, 2026-10-18).
+    local sideNames = { above = L["Above"], below = L["Below"], left = L["Left"], right = L["Right"] }
+    local platesSideRow = pages:Row("map", 1, L["Counter Position:"], nil)
+    controls.killPlatesSide = Widgets.CreateChoice(platesSideRow, {
+        min = 1, max = #ns.KillPlates.SIDES, step = 1, value = 3,
+        format = function(index) return sideNames[ns.KillPlates.SIDES[index]] end,
+        onChange = function(index) ns.KillPlates:SetSide(ns.KillPlates.SIDES[index]) end,
+    })
+    ns.SettingsPages.FitStepper(controls.killPlatesSide, sideNames)
+    controls.killPlatesSide:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local platesWorthRow = pages:Row("map", 1, L["Nameplate Worth:"],
         L["Adds what one kill is worth once you have 20 kills."])
     controls.killPlatesWorth = Widgets.CreateCheckbox(platesWorthRow, L["Show"], function(checked)
@@ -973,6 +1138,10 @@ function SettingsUI:BuildMapPage()
         L["Dock puts it back under the Kills & Loot panel."])
     controls.goals = CommandButton(goalsRow, L["Show"], "goals", 64)
     controls.goalsDock = CommandButton(goalsRow, L["Dock"], "goals dock", 64, CONTROL_X + 70)
+
+    local killGoalRow = pages:Row("map", 2, L["Kill Goal:"], nil)
+    controls.killGoal = CommandButton(killGoalRow, L["Open"], "killgoal", 64)
+    controls.killGoalSummary = CommandButton(killGoalRow, L["Summary"], "killgoal summary", 64, CONTROL_X + 70)
 
     local bankRow = pages:Row("map", 2, L["Count the Bank:"],
         L["Goals count your bank as well as your bags."])
@@ -992,14 +1161,6 @@ function SettingsUI:BuildMapPage()
     end, false)
     controls.arrow:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- Through the command, so the result is kept for "read the probe"
-    -- (ns.KeepCheck), as the typed `/farm arrow check` keeps it.
-    local check = Widgets.CreateButton(arrowRow, L["Check"], function()
-        ns.HandleSlash("arrow check")
-    end, { width = 60, height = 20 })
-    check:SetPoint("TOPRIGHT", arrowRow, "TOPRIGHT", 0, 0)
-    controls.arrowCheck = check
-
     local _, nextButton = CommandRow(pages, "map", 2, L["Next Place:"],
         L["Points the arrow at the next place for its goal."],
         L["Next"], "arrow next")
@@ -1012,6 +1173,58 @@ function SettingsUI:BuildMapPage()
         ns.TomTom:SetOn(checked)
     end, true)
     controls.tomtom:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- A trip step by step to a far place (Logic/Travel.lua), on unless
+    -- unticked. The Retail TOC leaves Travel out (its routes are Classic's),
+    -- so the row shows only where it is loaded.
+    if ns.Travel then
+        local routeRow = pages:Row("map", 2, L["Guide Me:"],
+            L["When the place is in another zone or across the sea, the arrow leads you there step by step."])
+
+        controls.arrowRoute = Widgets.CreateCheckbox(routeRow, L["On"], function(checked)
+            ns.Travel:SetOn(checked)
+        end, true)
+        controls.arrowRoute:SetPoint("TOPLEFT", CONTROL_X, -2)
+    end
+
+    -- A glow where you kill the most (Logic/Heat.lua, a test feature).
+    pages:Section("map", 2, L["KILL HEAT"])
+
+    local heatWorldRow = pages:Row("map", 2, L["Heat on World Map:"],
+        L["Glows where you kill what you're tracking."])
+
+    controls.heatWorld = Widgets.CreateCheckbox(heatWorldRow, L["Show"], function(checked)
+        ns.Heat:SetWorld(checked)
+    end, false)
+    controls.heatWorld:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local heatMinimapRow = pages:Row("map", 2, L["Heat on Minimap:"],
+        L["The same glow around you, softer."])
+
+    controls.heatMinimap = Widgets.CreateCheckbox(heatMinimapRow, L["Show"], function(checked)
+        ns.Heat:SetMinimap(checked)
+    end, false)
+    controls.heatMinimap:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local heatLevelRow = pages:Row("map", 2, L["Heat Strength:"], nil)
+    local heatNames = { L["Some"], L["More"], L["Most"] }
+    controls.heatLevel = Widgets.CreateChoice(heatLevelRow, {
+        min = 1, max = #heatNames, step = 1, value = 2,
+        format = function(index) return heatNames[index] end,
+        onChange = function(index) ns.Heat:SetLevel(index) end,
+    })
+    ns.SettingsPages.FitStepper(controls.heatLevel, heatNames)
+    controls.heatLevel:SetPoint("TOPLEFT", CONTROL_X, -2)
+end
+
+--- A wrapping line of small text under a row's control, for a status.
+local function StatusText(row, y)
+    local text = Theme.CreateLabel(row, "tiny", "muted")
+    text:SetPoint("TOPLEFT", 0, y)
+    text:SetWidth(COLUMN_WIDTH)
+    text:SetJustifyH("LEFT")
+    if text.SetWordWrap then text:SetWordWrap(true) end
+    return text
 end
 
 --- Sharing: kills, drop rates and gathering with your other account.
@@ -1021,7 +1234,7 @@ function SettingsUI:BuildSharingPage()
 
     pages:Section("sharing", 1, L["YOUR OTHER ACCOUNT"])
 
-    local shareRow = pages:Row("sharing", 1, L["Share With It:"],
+    local shareRow = pages:Row("sharing", 1, L["Share With Your Other Account:"],
         L["Swaps your kill counts, drop rates, gathering and fishing with your other account while both are logged in. What comes in merges with your totals and can't be taken back out."])
     controls.share = Widgets.CreateCheckbox(shareRow, L["On"], function(checked)
         ns.Share:SetEnabled(checked)
@@ -1029,7 +1242,7 @@ function SettingsUI:BuildSharingPage()
     end, false)
     controls.share:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local namesRow = pages:Row("sharing", 1, L["Its Characters:"],
+    local namesRow = pages:Row("sharing", 1, L["Other Accounts Characters:"],
         L["Type your other account's characters, first and last name, with commas. Name one of yours in Farmer there too."])
     GrowRow(namesRow, 26)
     local names = Widgets.CreateSearchBox(namesRow, L["Ana Smith, Bob Jones"], nil, function(text)
@@ -1040,6 +1253,9 @@ function SettingsUI:BuildSharingPage()
     names:SetWidth(COLUMN_WIDTH)
     names:SetHeight(20)
     controls.shareNames = names
+    -- What came in from the names typed, and when (Share:Status).
+    GrowRow(namesRow, 30)
+    controls.shareStatus = StatusText(namesRow, -50)
 
     local _, syncButton = CommandRow(pages, "sharing", 1, L["Sync Now:"],
         L["Swaps anything new right now. It also does this every ten minutes."], L["Sync"], "share sync")
@@ -1066,6 +1282,11 @@ function SettingsUI:BuildSharingPage()
         SettingsUI:Refresh()
     end, false)
     controls.shareGuild:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- What came in from the guild, and when (GuildShare:Status).
+    local guildStatusRow = pages:Row("sharing", 2, L["Guild Status:"], nil)
+    GrowRow(guildStatusRow, 30)
+    controls.guildStatus = StatusText(guildStatusRow, -18)
 end
 
 --- Advanced: debug output, the data the addon carries, and the commands.
@@ -1081,6 +1302,34 @@ function SettingsUI:BuildAboutPage()
     pages:Section("about", 2, L["ABOUT"])
     local info = pages:Place("about", 2, About:Info(pages.pages.about.content, COLUMN_WIDTH))
     pages:Searchable("about", info, info.words)
+
+    -- Logic/Contribute.lua: drops sent to help Farmer's data, off until
+    -- ticked, and offered only where it can send (North America). Its
+    -- words wrap under the box, since they run long.
+    -- The Retail TOC leaves Contribute out, so Retail never sends drops.
+    if not ns.Contribute or not ns.Contribute:InRegion() then return end
+    local text = L["Share your data with Blackthornes to improve the Farmer AddOn."]
+    local holder = CreateFrame("Frame", nil, pages.pages.about.content)
+    holder:SetSize(COLUMN_WIDTH, 36)
+    local box = Widgets.CreateCheckbox(holder, text, function(checked)
+        ns.Contribute:SetOn(checked)
+        SettingsUI:Refresh()
+    end, false)
+    box:SetPoint("TOPLEFT", 0, -2)
+    box:SetWidth(COLUMN_WIDTH)
+    box.label:ClearAllPoints()
+    box.label:SetPoint("TOPLEFT", box.box, "TOPRIGHT", 6, 1)
+    box.label:SetWidth(COLUMN_WIDTH - 24)
+    box.label:SetJustifyH("LEFT")
+    if box.label.SetWordWrap then box.label:SetWordWrap(true) end
+    local ok, tall = pcall(box.label.GetStringHeight, box.label)
+    tall = ok and tonumber(tall) or 0
+    if tall < 14 then tall = 28 end
+    box:SetHeight(math.max(18, tall + 2))
+    holder:SetHeight(math.max(18, tall + 2) + 6)
+    pages:Place("about", 2, holder, -14)
+    pages:Searchable("about", holder, text)
+    self.controls.shareDrops = box
 end
 
 function SettingsUI:BuildAdvancedPage()
@@ -1089,13 +1338,8 @@ function SettingsUI:BuildAdvancedPage()
 
     pages:Section("advanced", 1, L["ADVANCED"])
 
-    local debugRow = pages:Row("advanced", 1, L["Debug:"],
-        L["Extra chat messages to help track down a problem."])
-
-    controls.debug = Widgets.CreateCheckbox(debugRow, L["On"], function(checked)
-        ns.db.debug = checked
-    end, false)
-    controls.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- Debug and the checks are typed only (/farm debug, the owner,
+    -- 2026-10-23): players don't need them.
 
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
     -- addons the player does not have. Off here is off in all of them.
@@ -1139,6 +1383,20 @@ end
 -- Called whenever the page opens and after any /farm command, because each
 -- of these can also be changed by typing, and a page showing a stale switch
 -- is worse than no page.
+--- Records came in: the status lines catch up, a moment later and only
+--- while Settings shows.
+function SettingsUI:ShareStatusChanged()
+    if self.statusSoon then return end
+    self.statusSoon = true
+    C_Timer.After(2, function()
+        SettingsUI.statusSoon = nil
+        local controls = SettingsUI.controls
+        if not (SettingsUI.frame and SettingsUI.frame:IsShown() and controls and controls.guildStatus) then return end
+        controls.shareStatus:SetText(ns.Share:Status() or "")
+        controls.guildStatus:SetText(ns.GuildShare:Status() or "")
+    end)
+end
+
 function SettingsUI:Refresh()
     if not (self.frame and self.frame:IsShown() and ns.db) then return end
 
@@ -1152,41 +1410,66 @@ function SettingsUI:Refresh()
     for _, button in ipairs(controls.trackerSizes or {}) do
         button:SetLabelColor(button.percent == tallyPercent and "good" or nil)
     end
-    controls.debug:SetChecked(db.debug == true)
     controls.sisters:SetChecked(ns.SisterNote:IsOn())
     controls.whatsNewPopup:SetChecked(ns.WhatsNew:IsOn())
     controls.whatsNewMotion:SetChecked(ns.WhatsNew:IsMotionOn())
     controls.share:SetChecked(db.shareData == true)
     controls.shareNames:SetText(db.shareNames or "")
     controls.shareGuild:SetChecked(db.shareGuild == true)
+    controls.shareStatus:SetText(ns.Share:Status() or "")
+    controls.guildStatus:SetText(ns.GuildShare:Status() or "")
+    if controls.shareDrops then controls.shareDrops:SetChecked(db.shareDrops == true) end
     controls.markersWorld:SetChecked(db.markersWorld ~= false)
     controls.markersMinimap:SetChecked(db.markersMinimap ~= false)
+    controls.heatWorld:SetChecked(db.heatWorld == true)
+    controls.heatMinimap:SetChecked(db.heatMinimap == true)
+    controls.heatLevel:SetValue(ns.Heat:Level(), true)
     controls.nodeSparkle:SetChecked(db.nodeSparkle ~= false)
     controls.sparkleStyle:SetValue(ns.NodeSparkle:Style() == "sparkles" and 1 or 2, true)
     controls.nodeSparkleHideIcon:SetChecked(db.nodeSparkleHideIcon ~= false)
-    controls.itemTooltip:SetChecked(db.itemTooltip ~= false)
-    controls.itemTooltipCraft:SetChecked(db.itemTooltipCraft ~= false)
-    controls.killTooltip:SetChecked(db.killTooltip ~= false)
-    controls.killTooltipDrops:SetChecked(db.killTooltipDrops ~= false)
+    controls.nodeSparkleColors:SetChecked(db.nodeSparkleColors ~= false)
+    controls.nodeSparkleCorpses:SetChecked(db.nodeSparkleCorpses == true)
+    for _, name in ipairs({ "itemTooltip", "itemTooltipCraft", "killTooltip", "killTooltipDrops" }) do
+        local stepper = controls[name]
+        stepper:SetValue(ns.TooltipShift:Mode(stepper.isOn(), stepper.shiftKey), true)
+    end
     controls.questMobCount:SetChecked(db.questMobCount ~= false)
     controls.killPlates:SetChecked(db.killPlates ~= false)
     controls.killPlatesWorth:SetChecked(db.killPlatesWorth == true)
+    do
+        local side = ns.KillPlates:Side()
+        for index, each in ipairs(ns.KillPlates.SIDES) do
+            if each == side then controls.killPlatesSide:SetValue(index, true) end
+        end
+    end
     controls.hideSkinning:SetChecked(db.hideSkinning ~= false)
     controls.otherPriceAddons:SetChecked(db.otherPriceAddons ~= false)
     controls.worldDrops:SetChecked(db.worldDrops ~= false)
     controls.rankingsOutside:SetChecked(db.rankingsOutside == true)
+    controls.rankingsSkipUncommon:SetChecked(db.rankingsSkipUncommon == true)
     controls.trashCan:SetChecked(db.trashCan ~= false)
     controls.openNote:SetChecked(db.openNote ~= false)
+    controls.lootFeed:SetChecked(db.lootFeed == true)
+    controls.lootFeedHold:SetValue(ns.LootFeed:Hold(), true)
+    controls.lootFeedWorth:SetChecked(db.lootFeedWorth ~= false)
     controls.bagsFull:SetChecked(db.bagsFullNotice ~= false)
     controls.openButton:SetChecked(db.openButton ~= false)
     controls.autoOpen:SetChecked(db.autoOpen == true)
     controls.arrow:SetChecked(db.arrowShown == true)
     controls.tomtom:SetChecked(db.useTomTom ~= false)
+    if controls.arrowRoute then controls.arrowRoute:SetChecked(db.arrowRoute ~= false) end
     controls.grindPins:SetChecked(db.grindPins ~= false)
 
     controls.tracker:SetChecked(not db.trackerHidden)
     controls.dodgeGroup:SetChecked(db.trackerDodgeGroup ~= false)
     controls.keepPanel:SetChecked(db.keepPanel == true)
+    controls.seeThrough:SetValue(db.trackerSeeThrough == true and ns.TrackerUI:SeeThroughLevel() or 0, true)
+    controls.goalsSeeThrough:SetValue(ns.SeeThrough:Level("goals"), true)
+    controls.goalSpotsSeeThrough:SetValue(ns.SeeThrough:Level("places"), true)
+    controls.rankUpSeeThrough:SetValue(ns.SeeThrough:Level("rankup"), true)
+    controls.recapSeeThrough:SetValue(ns.SeeThrough:Level("recap"), true)
+    controls.xpBarSeeThrough:SetValue(ns.SeeThrough:Level("xpbar"), true)
+    controls.lootFeedSeeThrough:SetValue(ns.SeeThrough:Level("lootfeed"), true)
     controls.report:SetChecked(db.trackerReport == true)
     controls.celebrate:SetChecked(db.trackerCelebrate ~= false)
 

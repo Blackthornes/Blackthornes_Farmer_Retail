@@ -11,6 +11,9 @@
 --   5. A slot that changed, or a cursor already holding something, is left.
 --   6. Hidden in combat, at a vendor and while Butler draws its own can.
 --   7. Settings and /farm trash turn it off and on.
+--   8. A trade good only wins when it is well under the junk (MATERIAL_LEAN).
+--   9. Two short stacks of one item that fit together: the can says to
+--      stack them, and a click joins them; nothing is picked up to throw.
 
 local env = dofile(lfs_cwd .. "/tools/testenv.lua")
 local suite = env.NewSuite("trash")
@@ -57,11 +60,11 @@ _G.C_Item = {
     GetItemInfo = function(id)
         local item = items[id]
         if not item then return nil end
-        return item.name, Link(item), item.quality, 1, 1, "Misc", "Misc", 20, item.equipLoc or "", 134400, item.price
+        return item.name, Link(item), item.quality, 1, 1, "Misc", "Misc", item.stack or 20, item.equipLoc or "", 134400, item.price
     end,
     GetItemInfoInstant = function(id)
         local item = items[id]
-        return id, "Misc", "Misc", item and item.equipLoc or "", 134400, 15, 0
+        return id, "Misc", "Misc", item and item.equipLoc or "", 134400, item and item.class or 15, 0
     end,
 }
 local holding = nil
@@ -125,6 +128,9 @@ bagWindow._scripts.OnShow()
 suite.check("full bags show the can", Showing())
 local point = Trash.can._point
 suite.check("on the cheapest stack", point and point[2] == buttons[2], point and tostring(point[2]))
+suite.check("a red glow lies round the same slot",
+    Trash.glow ~= nil and Trash.glow:IsShown()
+        and Trash.glow._point and Trash.glow._point[2] == buttons[2])
 suite.check("not the quest item, the locked rock, the sword or the goal's linen",
     Trash.pick and Trash.pick.itemID == 702)
 suite.check("the goal's linen may never go", Trash.slots["0:6"] and Trash.slots["0:6"].worth == nil)
@@ -182,6 +188,7 @@ suite.check("and the can comes back once the bags are read", Showing())
 -- 6.
 Fire("PLAYER_REGEN_DISABLED")
 suite.check("hidden in a fight", not Showing())
+suite.check("the glow goes with it", not Trash.glow:IsShown())
 Fire("PLAYER_REGEN_ENABLED")
 suite.check("back after it", Showing())
 Fire("MERCHANT_SHOW")
@@ -210,5 +217,40 @@ local box = ns.SettingsUI.controls.trashCan
 suite.check("the Settings box shows it off", box ~= nil and not box:GetChecked())
 box:GetScript("OnClick")(box)
 suite.check("ticking it turns it back on", ns.db.trashCan == true and Showing())
+
+-- 8. A grey trade good a little cheaper than the pelt leaves the pelt.
+bagWindow._shown = true
+if bagWindow._scripts.OnShow then bagWindow._scripts.OnShow() end
+local function Put(slot, item)
+    bag[slot] = item
+    if item then items[item.id] = item end
+    Fire("BAG_UPDATE_DELAYED")
+end
+ns.db.trashCan = true
+Put(7, { id = 710, name = "Frayed Cloth", quality = 0, price = 2, count = 2, class = 7 })
+suite.check("cloth worth 4 against a pelt worth 5 leaves the pelt", Trash.pick and Trash.pick.itemID == 702,
+    tostring(Trash.pick and Trash.pick.itemID))
+Put(7, { id = 710, name = "Frayed Cloth", quality = 0, price = 2, count = 1, class = 7 })
+suite.check("cloth worth well under it is picked", Trash.pick and Trash.pick.itemID == 710,
+    tostring(Trash.pick and Trash.pick.itemID))
+Put(7, nil)
+
+-- 9. A second Broken Fang stack that the first fits on.
+Put(8, { id = 701, name = "Broken Fang", quality = 0, price = 12, count = 4 })
+suite.check("two short stacks: the can says to stack them", Trash.pick and Trash.pick.merge == true)
+suite.check("on the smaller stack", Trash.can._point and Trash.can._point[2] == buttons[1])
+GameTooltip._lines = {}
+Trash.can:GetScript("OnEnter")(Trash.can)
+lines = table.concat(GameTooltip._lines, "\n")
+suite.check("the tooltip says to stack them", lines:find("Stack these to make room", 1, true) ~= nil, lines)
+suite.check("and never to throw away", lines:find("Throw away", 1, true) == nil, lines)
+picked = {}
+Trash.can:GetScript("OnClick")(Trash.can)
+suite.check("a click picks up the small stack and drops it on the other",
+    picked[1] == "0:1" and picked[2] == "0:8", table.concat(picked, ","))
+suite.check("and nothing is deleted", deleted == 0)
+Put(8, { id = 701, name = "Broken Fang", quality = 0, price = 12, count = 18 })
+suite.check("stacks that don't fit together are left", Trash.pick and not Trash.pick.merge
+    and Trash.pick.itemID == 702, tostring(Trash.pick and Trash.pick.itemID))
 
 suite.done()

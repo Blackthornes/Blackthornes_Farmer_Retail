@@ -17,6 +17,10 @@
 
 Locale\Locale.lua
 Locale\deDE.lua
+Locale\zhCN.lua
+Locale\frFR.lua
+Locale\esES.lua
+Locale\ruRU.lua
 
 Core\Init.lua
 Core\Util.lua
@@ -29,8 +33,11 @@ Data\Database.lua
 Data\Zones.lua
 
 Logic\Search.lua
+Logic\Looted.lua
 Logic\Harvest.lua
 Logic\Tracker.lua
+Logic\Heat.lua
+Logic\GameNumbers.lua
 Logic\Fishing.lua
 Logic\Gathering.lua
 Logic\Containers.lua
@@ -44,9 +51,11 @@ Logic\Goals.lua
 Logic\Session.lua
 Logic\XP.lua
 Logic\Stats.lua
+Logic\KillGoal.lua
 Logic\Moments.lua
 Logic\Butler.lua
 Logic\Pace.lua
+Logic\DisenchantFarm.lua
 Logic\Spots.lua
 Logic\Arrow.lua
 Logic\TomTom.lua
@@ -60,7 +69,9 @@ Logic\CSV.lua
 UI\Theme.lua
 UI\BlizzardLook.lua
 UI\Widgets.lua
+UI\SeeThrough.lua
 UI\Titanforged.lua
+UI\FoldWindow.lua
 UI\About.lua
 UI\WhatsNew.lua
 UI\SettingsPages.lua
@@ -74,11 +85,14 @@ UI\LootTable.lua
 UI\Rankings.lua
 UI\RankUp.lua
 UI\Recap.lua
+UI\KillGoal.lua
 UI\Grinding.lua
 UI\Stats.lua
 UI\MapMarkers.lua
+UI\Heat.lua
 UI\GrindPins.lua
 UI\Arrow.lua
+UI\TooltipShift.lua
 UI\ItemTooltip.lua
 UI\KillTooltip.lua
 UI\NodeSparkle.lua
@@ -89,6 +103,7 @@ UI\NamePrompt.lua
 UI\HiddenWindow.lua
 UI\Trash.lua
 UI\OpenNote.lua
+UI\LootFeed.lua
 UI\BagsFull.lua
 UI\OpenButton.lua
 UI\Veil.lua

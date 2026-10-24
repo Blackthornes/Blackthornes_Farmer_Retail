@@ -190,6 +190,18 @@ suite.check("today not farmed yet keeps yesterday's run", run == 2, run)
 local days = Stats:Days(70)
 suite.check("the calendar is ten weeks, today last", #days == 70 and days[70].key == Stats.DayBack(0))
 
+-- Goblin Gold in Tradeskills reads kills and their loot over a week.
+store.days = {}
+store.days[Stats.DayBack(0)] = { kills = 4, drops = 300, grey = 20, coin = 50, gather = 999, mobs = {} }
+store.days[Stats.DayBack(6)] = { kills = 6, drops = 100, coin = 30, mobs = {} }
+store.days[Stats.DayBack(7)] = { kills = 90, drops = 9000, coin = 900, mobs = {} }
+local week = Stats:KillsAndLoot(7)
+suite.check("a week's kills, today and six days back", week.kills == 10, week.kills)
+suite.check("its loot is drops and greys, never gathering", week.loot == 420, week.loot)
+suite.check("and its coin", week.coin == 80, week.coin)
+store.days = {}
+Farm(0) Farm(1) Farm(2) Farm(5) Farm(6) Farm(7) Farm(8)
+
 -- Pruning: a day past the keep and short sessions go.
 store.days["2000-01-01"] = { kills = 1, mobs = {} }
 Stats:Prune()
@@ -244,6 +256,11 @@ store.pace = timed
 ns.DB:RegisterItem({ name = "Lucky Charm", id = 99501, category = "misc",
     sources = { { name = "Charm Gnoll", zone = "Nowhere", minLevel = 5, chance = 10 } } })
 AUCTION[99501] = 100
+-- A rare, pricey drop the gnoll gives 1 time in 100: 20 kills expect only
+-- 0.2 of it, so not getting it must not make the player "less lucky".
+ns.DB:RegisterItem({ name = "Gnoll Gem", id = 99502, category = "misc",
+    sources = { { name = "Charm Gnoll", zone = "Nowhere", minLevel = 5, chance = 1 } } })
+AUCTION[99502] = 100000
 Stats.luck = nil
 suite.check("no luck before enough kills", Stats:Luck() == nil)
 for index = 1, 20 do
@@ -258,6 +275,14 @@ suite.check("twice the expected drops is 100% luckier",
 suite.check("over the kills of rated mobs", luck and luck.kills == 20, luck and luck.kills)
 suite.check("with the item listed", luck and luck.rows[1] and luck.rows[1].name == "Lucky Charm"
     and luck.rows[1].got == 4 and math.abs(luck.rows[1].expected - 2) < 0.01)
+suite.check("a drop not yet expected once is left out of luck",
+    luck and #luck.rows == 1, luck and #luck.rows)
+local minExpected = Stats.LUCK_MIN_EXPECTED
+Stats.LUCK_MIN_EXPECTED = 3
+local early = Stats:Luck()
+suite.check("with only rare drops so far, it's too soon to tell",
+    early and early.tooSoon == true and early.percent == nil and early.kills == 20, early and early.percent)
+Stats.LUCK_MIN_EXPECTED = minExpected
 suite.check("words for it", StatsUI.LuckWords(100) == "100% luckier" and StatsUI.LuckWords(-20) == "20% less lucky"
     and StatsUI.LuckWords(2) == "Right on the odds")
 
@@ -335,9 +360,28 @@ UI:Show()
 UI:ShowTab("stats")
 suite.check("choosing it shows its view", UI.statsView:IsShown())
 suite.check("and hides the search", not UI.searchView:IsShown())
-suite.check("the window grows to fit the charts",
-    UI.frame:GetWidth() == StatsUI.WIDTH and UI.frame:GetHeight() == StatsUI.HEIGHT,
+suite.check("the window fits the charts",
+    UI.frame:GetWidth() >= StatsUI.WIDTH and UI.frame:GetHeight() == StatsUI.HEIGHT,
     tostring(UI.frame:GetWidth()) .. "x" .. tostring(UI.frame:GetHeight()))
+suite.check("the charts fill the window's width", StatsUI.canvas:GetWidth() == UI.frame:GetWidth(),
+    StatsUI.canvas:GetWidth())
+
+-- One size for every tab (the owner, 2026-10-17).
+local statsW, statsH = UI.frame:GetWidth(), UI.frame:GetHeight()
+for _, key in ipairs({ "search", "rankings", "grind", "stats" }) do
+    UI:ShowTab(key)
+    suite.check("the " .. key .. " tab keeps the one size",
+        UI.frame:GetWidth() == statsW and UI.frame:GetHeight() == statsH,
+        tostring(UI.frame:GetWidth()) .. "x" .. tostring(UI.frame:GetHeight()))
+end
+UI:Claim(statsW + 100)
+UI:ShowTab("search")
+suite.check("a tab that needs more widens every tab", UI.frame:GetWidth() == statsW + 100,
+    UI.frame:GetWidth())
+UI:ShowTab("grind")
+suite.check("and the others keep it", UI.frame:GetWidth() == statsW + 100, UI.frame:GetWidth())
+suite.check("the width is kept for next time", ns.db.windowWidth == statsW + 100, ns.db.windowWidth)
+UI:ShowTab("stats")
 ns.Motion:FinishAll()
 suite.check("it is remembered", ns.db.lastTab == "stats")
 
@@ -346,6 +390,17 @@ suite.check("the mobs card lists the best", StatsUI.mobsCard.rows[1]:IsShown()
     and StatsUI.mobsCard.rows[1].name:GetText() == "Quick Boar", StatsUI.mobsCard.rows[1].name:GetText())
 suite.check("the luck card says how lucky", StatsUI.luckCard.headline:GetText() == "100% luckier",
     StatsUI.luckCard.headline:GetText())
+do
+    local minExpected = Stats.LUCK_MIN_EXPECTED
+    Stats.LUCK_MIN_EXPECTED = 1000
+    StatsUI:DrawLuck(StatsUI.luckCard, false, "session")
+    suite.check("with only rare drops so far, the card says it's too soon",
+        StatsUI.luckCard.headline:GetText() == "Too soon to tell" and not StatsUI.luckCard.meter:IsShown(),
+        StatsUI.luckCard.headline:GetText())
+    Stats.LUCK_MIN_EXPECTED = minExpected
+    StatsUI:DrawLuck(StatsUI.luckCard, false, "session")
+    suite.check("and the meter comes back once a drop is due", StatsUI.luckCard.meter:IsShown())
+end
 suite.check("the levels card names the fastest", StatsUI.levelsCard.headline:GetText():find("level 6", 1, true) ~= nil,
     StatsUI.levelsCard.headline:GetText())
 suite.check("the top shows days in a row", StatsUI.tiles[4].value:GetText() == tostring(Stats:Streak()))
@@ -390,7 +445,7 @@ suite.check("a loot while it shows draws it again", draws >= 1, draws)
 
 UI:ShowTab("search")
 suite.check("another tab hides it", not UI.statsView:IsShown())
-suite.check("and the window is its usual height again", UI.frame:GetHeight() == 458, UI.frame:GetHeight())
+suite.check("and the window keeps its height", UI.frame:GetHeight() == StatsUI.HEIGHT, UI.frame:GetHeight())
 draws = 0
 Wait(10)
 Loot("Quick Boar", { COINS })
@@ -408,7 +463,7 @@ suite.check("an empty log explains the sessions card", StatsUI.sessionsCard.empt
 suite.check("and the sources card", StatsUI.sourcesCard.empty:IsShown())
 suite.check("and the luck card", StatsUI.luckCard.empty:IsShown())
 suite.check("and the levels card", StatsUI.levelsCard.empty:IsShown())
-suite.check("and the top says what shows when", StatsUI.tiles[2].note:GetText() == "nothing farmed yet",
+suite.check("and the top says what shows when", StatsUI.tiles[2].note:GetText() == "Nothing farmed yet",
     StatsUI.tiles[2].note:GetText())
 ns.XP.Record = realRecord
 
