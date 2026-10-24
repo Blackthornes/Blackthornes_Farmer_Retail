@@ -94,6 +94,14 @@ ever touch the Forever addon. So:
   spot's own time; older saves that close draw as one, the newest
   (`Gathering.Joined`; the save is unchanged). Tested in
   `tools/test_mapicons.lua`. Not yet seen in game.
+- The arrow moves on past empty spots (the owner asked 2026-10-24: a
+  node may not be up yet): a node spot you come within
+  `Arrow.ARRIVED_NODE` (12 yards) of, gathered or not, is checked for
+  `Arrow.CHECKED` (3 minutes) and sorted after the rest, like one just
+  picked (`Arrow:NoteArrivals`, `WasChecked`, session only). Passing one
+  checks it too; reaching a right-click pick lets the pick go. Grind tab
+  and Road to max spots are nodes (`NodeCamp`'s `kind = "node"`). Tested
+  in `tools/test_arrow.lua`. Not yet seen in game.
 - The rest of this file describes the Forever addon; read it as the
   starting point, not as what Retail has.
 
