@@ -267,7 +267,8 @@ function GrindGather:Zones(view, low, high)
         and ns.db.gathering.nodes or {}
     for _, entry in pairs(own) do
         if type(entry) == "table" and entry.kind == spec.gathering and type(entry.zone) == "string"
-            and type(entry.node) == "string" and not ns.DB:IsHiddenSource(entry.node) then
+            and type(entry.node) == "string" and not ns.DB:IsHiddenSource(entry.node)
+            and not (Gathering and Gathering.FromCreature and Gathering:FromCreature(entry)) then
             local zone = Zone(ns.Spots.English(entry.zone) or entry.zone)
             local node = Node(zone, entry.node)
             local gathers = tonumber(entry.gathers) or 0

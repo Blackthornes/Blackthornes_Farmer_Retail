@@ -226,6 +226,94 @@ ns.Spots.ForgetSkills()
 ns.HandleSlash("grind ore")
 check("a profession you lack shows nothing", not RoadUI.frame:IsShown())
 
+--------------------------------------------------------------------------------
+-- Every window shut (seen in game, 2026-10-24): Retail gives 0 of 0 for
+-- each line by its ID until a profession window opens, but the
+-- Professions book's numbers (GetProfessionInfo) are there.
+--------------------------------------------------------------------------------
+
+local book = {
+    { "Herbalism", 65, 300, 182, "Classic Herbalism" },
+    { "Skinning", 42, 300, 393, "Classic Skinning" },
+}
+_G.GetProfessionInfo = function(index)
+    local each = book[index]
+    if each then return each[1], 0, each[2], each[3], 0, 0, each[4], 0, nil, nil, each[5] end
+end
+ns.Spots.ForgetSkills()
+local names = { [2556] = "Classic Herbalism", [2564] = "Classic Skinning", [2555] = "Outland Herbalism" }
+_G.C_TradeSkillUI = {
+    GetProfessionInfoBySkillLineID = function(id)
+        return { skillLevel = 0, maxSkillLevel = 0, professionName = names[id] or "" }
+    end,
+}
+env.world.zone, env.world.mapID = "Teldrassil", 57
+ns.db.gathering.nodes["Teldrassil||Peacebloom"] = { zone = "Teldrassil", node = "Peacebloom", kind = "herb",
+    gathers = 29, items = { Peacebloom = { gathers = 29, count = 40, id = 2447 } } }
+ns.db.gathering.nodes["Teldrassil||Mageroyal"] = { zone = "Teldrassil", node = "Mageroyal", kind = "herb",
+    gathers = 7, items = { Mageroyal = { gathers = 7, count = 9, id = 785 } } }
+-- Herbs picked off a Timberling's corpse before it was told apart, and one
+-- marked when gathered.
+ns.db.tracker = ns.db.tracker or {}
+ns.db.tracker.mobs = ns.db.tracker.mobs or {}
+ns.db.tracker.mobs.Timberling = { kills = 30 }
+ns.db.gathering.nodes["Teldrassil||Timberling"] = { zone = "Teldrassil", node = "Timberling", kind = "herb",
+    gathers = 22, items = { Mageroyal = { gathers = 22, count = 30, id = 785 } } }
+ns.db.gathering.nodes["Teldrassil||Timberling Trampler"] = { zone = "Teldrassil", node = "Timberling Trampler",
+    kind = "herb", creature = true, gathers = 3, items = { ["Broken Vine"] = { gathers = 3, count = 3 } } }
+ns.GrindGather.paceVersion = ns.GrindGather.paceVersion + 1
+
+local herbs = Road:Path("herbs", "classic")
+check("Classic Herbalism read from the book", herbs.expansions[1].skill == 65 and herbs.expansions[1].most == 300
+    and herbs.line.skill == 65, herbs.expansions[1].skill)
+check("the others not learned read 0", herbs.expansions[2].skill == 0 and herbs.expansions[11].skill == 0)
+check("Midnight shows numbers too", herbs.expansions[12].skill == 0 and herbs.expansions[12].most == 100)
+local herbNow = herbs.stops[herbs.current]
+check("past Peacebloom at 65", herbs.stops[1].state == "done" and herbNow.node == "Mageroyal"
+    and herbNow.from == 50 and herbNow.to == 70, herbNow.node)
+local skinRoad = Road:Path("skinning", "classic")
+check("Classic Skinning read from the book", skinRoad.line and skinRoad.line.skill == 42)
+
+-- A line the book names by its English word when the client gives no name.
+names = {}
+book[1][2], book[1][5] = 12, "Khaz Algar Herbalism"
+herbs = Road:Path("herbs", "khazalgar")
+check("a line by its English word", herbs.expansions[11].skill == 12 and herbs.expansions[1].skill == 65)
+book[1][2], book[1][5] = 3, "Midnight Herbalism"
+herbs = Road:Path("herbs", "midnight")
+check("Midnight from the book before a window names it", herbs.expansions[12].skill == 3
+    and herbs.line.skill == 3)
+
+-- The window's own list of a profession's lines.
+_G.C_TradeSkillUI.GetChildProfessionInfos = function()
+    return { { professionID = 2550, skillLevel = 31, maxSkillLevel = 100, parentProfessionID = 182 } }
+end
+Road:ReadWindow()
+herbs = Road:Path("herbs", "legion")
+check("a window's lines are kept", herbs.expansions[7].skill == 31 and herbs.expansions[7].most == 100)
+_G.C_TradeSkillUI.GetChildProfessionInfos = nil
+
+-- Corpses are not nodes.
+local zones = ns.GrindGather:Zones("herbs", 1, 90)
+local listed = {}
+for _, zone in ipairs(zones) do
+    for _, node in ipairs(zone.nodes) do listed[node.name] = true end
+end
+check("herb nodes are listed", listed.Peacebloom and listed.Mageroyal)
+check("a mob you killed is not a herb", not listed.Timberling)
+check("a gather marked off a corpse is not a herb", not listed["Timberling Trampler"])
+check("a herb is not a mob", not ns.Gathering:FromCreature(ns.db.gathering.nodes["Teldrassil||Peacebloom"]))
+
+-- A corpse's loot window is told apart from a node's.
+local sources = {}
+_G.GetNumLootItems = function() return #sources end
+_G.GetLootSourceInfo = function(slot) return sources[slot], 1 end
+sources = { "Creature-0-1-2-3-3416-0001" }
+check("a corpse's window", ns.Gathering.CorpseWindow() == true)
+sources = { "GameObject-0-1-2-3-1617-0001" }
+check("a node's window", ns.Gathering.CorpseWindow() == false)
+_G.GetNumLootItems, _G.GetLootSourceInfo = nil, nil
+
 -- The suites share one Lua: leave the client as it was.
 _G.GetProfessions, _G.GetProfessionInfo, _G.C_TradeSkillUI = nil, nil, nil
 _G.C_Map.GetMapInfo = nil

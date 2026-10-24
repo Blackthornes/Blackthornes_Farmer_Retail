@@ -883,10 +883,44 @@ function Gathering:OnLoot()
     local items, quantities = ns.Tracker:LootedItems(true)
     local mapID, x, y = ns.Harvest:PlayerMapPosition()
 
-    if mapID then self:AddSpot(mapID, x, y, cast.node, cast.kind, items, quantities) end
+    -- Retail lets you pick herbs off some mobs and mine others: a corpse
+    -- is no node, so it puts no spot on the map (Retail only).
+    local creature = Gathering.CorpseWindow()
+    if mapID and not creature then self:AddSpot(mapID, x, y, cast.node, cast.kind, items, quantities) end
 
-    return self:Record(zone, location, cast.node, cast.kind, items, quantities,
+    local entry = self:Record(zone, location, cast.node, cast.kind, items, quantities,
         mapID and { x * 100, y * 100 } or nil)
+    if creature and type(entry) == "table" then entry.creature = true end
+    return entry
+end
+
+--- Is the open loot window a corpse's, by the guids the window names: a
+--- creature's and no object's (Retail only).
+function Gathering.CorpseWindow()
+    local creature = false
+    for _, guid in ipairs(ns.Harvest:LootSources()) do
+        if type(guid) == "string" then
+            if guid:find("^GameObject%-") then return false end
+            if guid:find("^Creature%-") or guid:find("^Vehicle%-") then creature = true end
+        end
+    end
+    return creature
+end
+
+--- Is `name` a mob you killed (the kill tally has it)? A herb or vein is
+--- never one (Retail only).
+function Gathering:IsCreatureName(name)
+    local tracker = ns.db and type(ns.db.tracker) == "table" and ns.db.tracker or nil
+    local mobs = tracker and type(tracker.mobs) == "table" and tracker.mobs or nil
+    return type(name) == "string" and mobs ~= nil and type(mobs[name]) == "table"
+end
+
+--- Was a gathering record taken off a mob's corpse, not a node? Marked
+--- when gathered, else by the name being a mob you killed, so records from
+--- before count too; nothing is rewritten (Retail only).
+function Gathering:FromCreature(entry)
+    if type(entry) ~= "table" then return false end
+    return entry.creature == true or self:IsCreatureName(entry.node)
 end
 
 --- The window closed: the gather or the skin it belonged to is over.

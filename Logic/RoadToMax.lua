@@ -103,6 +103,14 @@ RoadToMax.EXPANSIONS = {
         zones = { "Eversong Woods", "Zul'Aman", "Harandar", "Voidstorm", "Isle of Quel'Danas",
             "Silvermoon City" } },
 }
+-- The English word a line's name starts with ("Classic Herbalism"), for
+-- when the client gives no name by line ID.
+RoadToMax.LINE_WORDS = {
+    classic = { "Classic" }, outland = { "Outland" }, northrend = { "Northrend" },
+    cataclysm = { "Cataclysm" }, pandaria = { "Pandaria" }, draenor = { "Draenor" },
+    legion = { "Legion" }, bfa = { "Kul Tiran", "Zandalari" }, shadowlands = { "Shadowlands" },
+    dragonisles = { "Dragon Isles" }, khazalgar = { "Khaz Algar" }, midnight = { "Midnight" },
+}
 -- Draenor's Nagrand and Shadowmoon Valley share their names with
 -- Outland's, so by name they read as Outland; by the map you stand on they
 -- read as Draenor. Kept out of Draenor's list for that.
@@ -286,12 +294,74 @@ function RoadToMax.ReadLine(id)
     return skill, most, parent
 end
 
+--- The expansion a line named `lineName` (the client's words, "Classic
+--- Herbalism") is, or nil: by the name the client gives each line ID, else
+--- by the English word it starts with.
+function RoadToMax:LineExpansion(english, lineName)
+    if type(lineName) ~= "string" or lineName == "" then return nil end
+    local trade = type(C_TradeSkillUI) == "table" and C_TradeSkillUI or nil
+    for _, expansion in ipairs(RoadToMax.EXPANSIONS) do
+        local id = self:LineID(english, expansion)
+        local info = id and trade and Read(trade.GetProfessionInfoBySkillLineID, id)
+        local name = type(info) == "table" and ns.Harvest.Readable(Field(info, "professionName")) or nil
+        if name and name == lineName then return expansion end
+    end
+    for _, expansion in ipairs(RoadToMax.EXPANSIONS) do
+        for _, word in ipairs(RoadToMax.LINE_WORDS[expansion.key] or {}) do
+            if lineName:sub(1, #word + 1) == word .. " " then return expansion end
+        end
+    end
+    return nil
+end
+
+--- Keep what the client gives for one line: by its ID, else (Midnight's
+--- before a window names it) by "Herbalism|midnight".
+function RoadToMax:KeepLine(english, expansion, skill, most)
+    local _, mine = self:Store()
+    if not (mine and expansion and skill) then return end
+    local key = self:LineID(english, expansion) or (english .. "|" .. expansion.key)
+    local cap = most and most > 0 and most or nil
+    local kept = mine.lines[key]
+    if type(kept) ~= "table" or kept.skill ~= skill or kept.most ~= cap then
+        mine.lines[key] = { skill = skill, most = cap }
+        RoadToMax.version = (RoadToMax.version or 0) + 1
+    end
+end
+
+--- Read the professions you have (GetProfessionInfo, what the game's own
+--- Professions book shows): each one's skill in the line it is on now.
+--- Retail answers this with every window shut, where
+--- GetProfessionInfoBySkillLineID gives 0 until a profession window opens.
+function RoadToMax:ReadBook()
+    if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return end
+    local ok, first, second = pcall(GetProfessions)
+    if not ok then return end
+    for _, index in ipairs({ Number(first) or false, Number(second) or false }) do
+        if index then
+            local got, name, _, rank, most, _, _, line, _, _, _, lineName = pcall(GetProfessionInfo, index)
+            if got then
+                local english = RoadToMax.PARENTS[Number(line) or 0]
+                    or ns.Gathering.SkillOf(ns.Harvest.Readable(name), { "Mining", "Herbalism", "Skinning" })
+                local expansion = english and self:LineExpansion(english, ns.Harvest.Readable(lineName))
+                rank = Number(rank)
+                if expansion and rank then self:KeepLine(english, expansion, rank, Number(most)) end
+            end
+        end
+    end
+end
+
 --- Your skill and cap in `english` for `expansion`: { skill, most } with
---- skill 0 for a line not learned, or nil when nothing says.
+--- skill 0 for a line not learned (or one nothing has said of yet).
 function RoadToMax:Skill(english, expansion)
     local id = self:LineID(english, expansion)
-    if not id then return nil end
     local _, mine = self:Store()
+    if not id then
+        local kept = mine and mine.lines[english .. "|" .. expansion.key]
+        if type(kept) == "table" and tonumber(kept.skill) then
+            return { skill = tonumber(kept.skill), most = tonumber(kept.most) or expansion.cap }
+        end
+        return { skill = 0, most = expansion.cap }
+    end
     local skill, most, parent = RoadToMax.ReadLine(id)
     if skill and (parent == nil or parent == english) and (skill > 0 or (most or 0) > 0) then
         local cap = most and most > 0 and most or expansion.cap
@@ -312,18 +382,31 @@ function RoadToMax:Skill(english, expansion)
     return nil
 end
 
---- A profession window is open: note what it says of every line it lists,
---- and learn the newest line's ID (Midnight's).
+--- A profession window is open: note what it says of every line it lists
+--- (the expansion lines of the profession shown, and every profession's
+--- lines), and learn the newest line's ID (Midnight's).
 function RoadToMax:ReadWindow()
     local trade = type(C_TradeSkillUI) == "table" and C_TradeSkillUI or nil
-    local ids = trade and Read(trade.GetAllProfessionTradeSkillLines)
-    if type(ids) ~= "table" then return end
+    if not trade then return end
     local store, mine = self:Store()
-    for _, raw in ipairs(ids) do
+    local found = {}
+    local children = Read(trade.GetChildProfessionInfos)
+    for _, info in ipairs(type(children) == "table" and children or {}) do
+        local id = type(info) == "table" and Number(Field(info, "professionID"))
+        local skill = id and Number(Field(info, "skillLevel"))
+        local parent = id and RoadToMax.PARENTS[Number(Field(info, "parentProfessionID")) or 0]
+        if skill and parent then found[#found + 1] = { id, skill, Number(Field(info, "maxSkillLevel")), parent } end
+    end
+    local ids = Read(trade.GetAllProfessionTradeSkillLines)
+    for _, raw in ipairs(type(ids) == "table" and ids or {}) do
         local id = Number(raw)
         local skill, most, parent
         if id then skill, most, parent = RoadToMax.ReadLine(id) end
-        if skill and parent then
+        if skill and parent then found[#found + 1] = { id, skill, most, parent } end
+    end
+    for _, each in ipairs(found) do
+        local id, skill, most, parent = each[1], each[2], each[3], each[4]
+        do
             local known = false
             local highest = 0
             for _, expansion in ipairs(RoadToMax.EXPANSIONS) do
@@ -335,7 +418,11 @@ function RoadToMax:ReadWindow()
                 store.newest[parent] = id
                 RoadToMax.version = (RoadToMax.version or 0) + 1
             end
-            if mine then mine.lines[id] = { skill = skill, most = most and most > 0 and most or nil } end
+            -- A line the window reads as 0 of 0 says nothing new: keep
+            -- what the book said of it.
+            if mine and (skill > 0 or (most or 0) > 0 or type(mine.lines[id]) ~= "table") then
+                mine.lines[id] = { skill = skill, most = most and most > 0 and most or nil }
+            end
         end
     end
 end
@@ -352,6 +439,7 @@ function RoadToMax:Gathered(english, zone)
     if not expansion then return end
     local _, mine = self:Store()
     if not mine then return end
+    pcall(self.ReadBook, self)
     local now = self:Skill(english, expansion)
     local key = english .. "|" .. expansion.key
     local pace = mine.pace[key]
@@ -407,7 +495,8 @@ local function OwnGathering(kind)
     end
     for _, node in pairs(type(gathering.nodes) == "table" and gathering.nodes or {}) do
         if type(node) == "table" and type(node.zone) == "string" and type(node.node) == "string"
-            and node.kind == kind and not ns.DB:HidesSource(node.node) then
+            and node.kind == kind and not ns.DB:HidesSource(node.node)
+            and not ns.Gathering:FromCreature(node) then
             local zone = ns.Spots.English(node.zone) or node.zone
             local entry = Zone(zone)
             local gathers = tonumber(node.gathers) or 0
@@ -424,7 +513,8 @@ local function OwnGathering(kind)
         end
     end
     for _, spot in ipairs(type(gathering.spots) == "table" and gathering.spots or {}) do
-        if type(spot) == "table" and type(spot.node) == "string" and (spot.kind == nil or spot.kind == kind) then
+        if type(spot) == "table" and type(spot.node) == "string" and (spot.kind == nil or spot.kind == kind)
+            and not ns.Gathering:IsCreatureName(spot.node) then
             local zone = ZoneOfMap(spot.map)
             if zone then
                 local entry = Zone(zone)
@@ -611,6 +701,7 @@ function RoadToMax:Path(view, pick)
     hereZone = hereZone and hereZone ~= "" and (ns.Spots.English(hereZone) or hereZone) or nil
 
     -- Every line is read each draw, so the key follows the skills.
+    pcall(self.ReadBook, self)
     local expansions, anyRead = {}, false
     for index, expansion in ipairs(RoadToMax.EXPANSIONS) do
         local read = self:Skill(spec.skill, expansion)
@@ -803,5 +894,8 @@ function RoadToMax:OnEnable()
     end
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", Soon)
     ns.RegisterEvent(self, "TRADE_SKILL_LIST_UPDATE", Soon)
-    ns.RegisterEvent(self, "SKILL_LINES_CHANGED", function() RoadToMax.version = (RoadToMax.version or 0) + 1 end)
+    ns.RegisterEvent(self, "SKILL_LINES_CHANGED", function()
+        RoadToMax.version = (RoadToMax.version or 0) + 1
+        pcall(self.ReadBook, self)
+    end)
 end
