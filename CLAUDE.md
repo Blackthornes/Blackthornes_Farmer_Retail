@@ -93,7 +93,17 @@ ever touch the Forever addon. So:
   whatever its name (`Gathering.Joins`), teaching nothing about the
   spot's own time; older saves that close draw as one, the newest
   (`Gathering.Joined`; the save is unchanged). Tested in
-  `tools/test_mapicons.lua`. Not yet seen in game.
+  `tools/test_mapicons.lua`. Fixed after the owner's screenshots
+  (2026-10-24, from a mockup he said build): Retail cuts an icon round
+  with a mask texture (`MapMarkers.RoundIcon`, also for the Grind pins);
+  through `SetMask` the pin icon showed square and scrambled. World map
+  pins of one kind closer than `JOIN_PIXELS` on screen at the zoom shown
+  draw as one with a count (`MapMarkers.Group`, `GroupItems`,
+  `GroupIcon`, `GroupNode`; drawing only, the save is unchanged), in
+  colour once any of its spots is back; its hover says how many spots and
+  `Respawn:GroupLines` (how many are back, when the next is). A pin is
+  `farmerMarker`, and `Respawn:OnTooltipShown` adds no "Grows back in
+  about" line to its card. Not yet seen in game.
 - The arrow moves on past empty spots (the owner asked 2026-10-24: a
   node may not be up yet): a node spot you come within
   `Arrow.ARRIVED_NODE` (12 yards) of, gathered or not, is checked for

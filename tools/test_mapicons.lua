@@ -211,4 +211,116 @@ for _, line in ipairs(GameTooltip._lines) do
 end
 suite.check("and nothing about growing back", not grows)
 
+--------------------------------------------------------------------------------
+-- Pins that would sit on each other draw as one, with a count
+--------------------------------------------------------------------------------
+
+local function At(x, y, kind, node)
+    return { map = 37, x = x, y = y, kind = kind or "herb", node = node or "Peacebloom",
+        gathers = 1, first = 1, last = wall - 60 }
+end
+
+-- A 1000 by 667 canvas at zoom 1: a spot's place on screen is x * 1000.
+local groups = MapMarkers.Group({ At(0.5, 0.5), At(0.51, 0.5), At(0.6, 0.5) }, 1000, 667, 1)
+suite.check("two herbs 10 pixels apart join, one 100 off stays its own", #groups == 2
+    and #groups[1].spots == 2 and #groups[2].spots == 1, #groups)
+suite.check("a joined pin sits in the middle of its spots",
+    math.abs(groups[1].x - 0.505) < 1e-9 and groups[1].y == 0.5)
+
+groups = MapMarkers.Group({ At(0.5, 0.5), At(0.51, 0.5) }, 1000, 667, 4)
+suite.check("zoomed in they come apart", #groups == 2, #groups)
+
+groups = MapMarkers.Group({ At(0.5, 0.5), At(0.501, 0.5, "ore", "Copper Vein") }, 1000, 667, 1)
+suite.check("a herb and a vein never join", #groups == 2, #groups)
+
+-- A long line of spots each 15 pixels on: the pin keeps its first spot as
+-- its anchor, so the line does not join end to end.
+groups = MapMarkers.Group({ At(0.5, 0.5), At(0.515, 0.5), At(0.53, 0.5), At(0.545, 0.5) }, 1000, 667, 1)
+suite.check("a line of spots never joins end to end", #groups == 2, #groups)
+
+Gathering:ClearSpots()
+local saved = Gathering:Spots()
+saved[1] = At(0.5, 0.5)
+saved[2] = At(0.505, 0.5)
+saved[2].node, saved[2].items = "Silverleaf", { Silverleaf = 3 }
+saved[1].items = { Peacebloom = 1 }
+saved[3] = At(0.8, 0.8)
+Gathering.spotsVersion = (Gathering.spotsVersion or 0) + 1
+MapMarkers:Refresh()
+
+local pins = MapMarkers.worldPool
+suite.check("three spots, two pins", pins.used == 2, pins.used)
+local many = pins.pins[1]
+suite.check("the joined pin counts its spots", many.count._text == "2" and many.count._shown ~= false,
+    many.count._text)
+suite.check("a pin of one shows no count", pins.pins[2].count._text == "")
+suite.check("it shows what its spots gave most", MapMarkers.GroupItems(many.group)[1].name == "Silverleaf")
+
+GameTooltip._lines = {}
+many:GetScript("OnEnter")(many)
+suite.check("its hover is named for the node taken most there",
+    GameTooltip._lines[1] == "Peacebloom", GameTooltip._lines[1])
+suite.check("then what they gave together", GameTooltip._lines[2] == "Silverleaf"
+    and tostring(GameTooltip._lines[3]):find("Peacebloom$") ~= nil, GameTooltip._lines[3])
+suite.check("then how many spots and gathers",
+    GameTooltip._lines[4] == "2 spots, gathered 2 times, last 1 min ago", GameTooltip._lines[4])
+suite.check("and learning while no time is known",
+    tostring(GameTooltip._lines[5]):find("learning") ~= nil, GameTooltip._lines[5])
+
+-- Peacebloom grows back in about 10 minutes; one gathered 11 minutes ago,
+-- one 2 minutes ago.
+for _ = 1, 3 do Respawn:Learn(37, "Peacebloom", 600) end
+saved[1].last, saved[2].node, saved[2].last = wall - 660, "Peacebloom", wall - 120
+local lines = Respawn:GroupLines({ saved[1], saved[2] }, wall, "Peacebloom")
+suite.check("one line for those back", lines[1] and lines[1].text == "1 should be back by now  (from 3 returns)",
+    lines[1] and lines[1].text)
+suite.check("one for the next to come back", lines[2] and lines[2].text == "Next back in about 8 min",
+    lines[2] and lines[2].text)
+suite.check("and nothing else", #lines == 2)
+
+MapMarkers:Refresh()
+suite.check("a joined pin is in colour once any of its spots is back", MapMarkers.worldPool.pins[1].back == true)
+
+--------------------------------------------------------------------------------
+-- The node tooltip leaves our pins alone
+--------------------------------------------------------------------------------
+
+_G.GameTooltipTextLeft1 = env.Stub({ _text = "Peacebloom" })
+env.world.mapID, env.world.position = 37, { 0.5, 0.5 }
+local owner
+GameTooltip.GetOwner = function() return owner end
+
+owner = many
+GameTooltip._lines = {}
+Respawn.added = nil
+Respawn:OnTooltipShown(GameTooltip, false)
+suite.check("a map pin's card gets no \"Grows back in about\" line", #GameTooltip._lines == 0,
+    GameTooltip._lines[1])
+
+owner = nil
+Respawn.added = nil
+Respawn:OnTooltipShown(GameTooltip, false)
+suite.check("a herb in the world still gets it",
+    tostring(GameTooltip._lines[1]):find("Grows back in about") ~= nil, GameTooltip._lines[1])
+Respawn.added = nil
+
+--------------------------------------------------------------------------------
+-- Round icons the Retail way
+--------------------------------------------------------------------------------
+
+local frame, icon = env.Stub(), env.Stub()
+local made, added
+frame.CreateMaskTexture = function() made = env.Stub() return made end
+icon.AddMaskTexture = function(_, mask) added = mask end
+MapMarkers.RoundIcon(frame, icon)
+suite.check("an icon is cut round by a mask texture", made ~= nil and added == made)
+
+frame, icon = env.Stub(), env.Stub()
+local old
+icon.SetMask = function(_, file) old = file end
+frame.CreateMaskTexture = nil
+rawset(frame, "CreateMaskTexture", false)
+MapMarkers.RoundIcon(frame, icon)
+suite.check("SetMask only where there are no mask textures", old ~= nil)
+
 suite.done()

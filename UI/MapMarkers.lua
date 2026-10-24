@@ -8,7 +8,8 @@
 -- ring, with a green check in the corner, at the bottom of the map's pins.
 -- Once Logic/Respawn.lua says the node should be back, it shows in full
 -- colour without the check (the owner, 2026-10-24); a fishing spot has no
--- grow-back time, so it stays grey. On the minimap, where the game's
+-- grow-back time, so it stays grey. Pins that would sit on top of each other
+-- at the zoom shown are drawn as one with a count (MapMarkers.Group). On the minimap, where the game's
 -- node blips are part of the map and every addon frame draws over them, a
 -- marker is an empty gold frame with the check outside a corner, so a node
 -- that has grown back shows through its middle. The longer ago the gather,
@@ -35,8 +36,13 @@ local Util = ns.Util
 
 -- On screen, whatever the zoom. The minimap's is the outside of its frame;
 -- the clear middle is a little smaller, and wider than the game's node blip.
-local WORLD_SIZE = 18
+local WORLD_SIZE = 22
 local MINIMAP_SIZE = 20
+
+-- World map pins of one kind closer than this on screen, in pixels, are
+-- drawn as one pin with a count (the owner, 2026-10-24: a farmed patch was a
+-- pile of pins). Only how they are drawn: the saved spots never change.
+local JOIN_PIXELS = WORLD_SIZE
 
 -- The minimap is redrawn this often while you move, in seconds.
 local MINIMAP_STEP = 0.1
@@ -67,6 +73,27 @@ local CHECK = [[Interface\RaidFrame\ReadyCheck-Ready]]
 
 MapMarkers.FRESH = FRESH
 MapMarkers.OLD = OLD
+MapMarkers.WORLD_SIZE = WORLD_SIZE
+MapMarkers.JOIN_PIXELS = JOIN_PIXELS
+
+--- Cut `icon` round. Retail rounds a texture with a mask texture of its
+--- own; through Texture:SetMask, which the first pins used, the icon showed
+--- square and scrambled while the same icon read fine in the hover card
+--- (seen in game 2026-10-24). SetMask only where the client has no mask
+--- textures.
+function MapMarkers.RoundIcon(frame, icon)
+    if type(frame.CreateMaskTexture) == "function" and type(icon.AddMaskTexture) == "function" then
+        local ok, mask = pcall(frame.CreateMaskTexture, frame, nil, "ARTWORK")
+        if ok and mask then
+            pcall(mask.SetTexture, mask, ROUND, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            mask:SetAllPoints(icon)
+            pcall(icon.AddMaskTexture, icon, mask)
+            return mask
+        end
+    end
+    pcall(icon.SetMask, icon, ROUND)
+    return nil
+end
 
 --------------------------------------------------------------------------------
 -- Switches
@@ -214,14 +241,87 @@ function MapMarkers.SpotItems(spot)
     return list
 end
 
---- The icon a spot shows: the item it gave most that the game has an icon
---- for, else the plain herb, ore or fish.
-function MapMarkers.SpotIcon(spot)
-    for _, item in ipairs(MapMarkers.SpotItems(spot)) do
+--- What a joined pin's spots gave together, most first, as SpotItems.
+function MapMarkers.GroupItems(group)
+    local spots = group.spots
+    if #spots == 1 then return MapMarkers.SpotItems(spots[1]) end
+
+    local counts = {}
+    for _, spot in ipairs(spots) do
+        for _, item in ipairs(MapMarkers.SpotItems(spot)) do
+            counts[item.name] = (counts[item.name] or 0) + item.count
+        end
+    end
+    local list = {}
+    for name, count in pairs(counts) do list[#list + 1] = { name = name, count = count } end
+    table.sort(list, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    return list
+end
+
+--- The first of `items` the game has an icon for, else the plain one.
+local function IconOf(items, kind)
+    for _, item in ipairs(items) do
         local icon = MapMarkers.ItemIcon(item.name)
         if icon then return icon end
     end
-    return ICONS[spot.kind] or ICONS.herb
+    return ICONS[kind] or ICONS.herb
+end
+
+--- The icon a spot shows: the item it gave most that the game has an icon
+--- for, else the plain herb, ore or fish.
+function MapMarkers.SpotIcon(spot)
+    return IconOf(MapMarkers.SpotItems(spot), spot.kind)
+end
+
+--- The icon a joined pin shows: what its spots gave most together.
+function MapMarkers.GroupIcon(group)
+    return IconOf(MapMarkers.GroupItems(group), group.kind)
+end
+
+--- A single spot as a pin's group of one.
+function MapMarkers.Single(spot)
+    return { spots = { spot }, kind = spot.kind, x = spot.x, y = spot.y }
+end
+
+--- Join spots of one kind that would sit on each other on screen. `width`
+--- and `height` are the canvas's, `scale` how far it is zoomed: a spot's
+--- place on screen is x * width * scale. Each pin keeps the first spot that
+--- started it as its anchor, so a long line of spots never joins end to end.
+--- Returns { { spots, kind, x, y } }, x and y the middle of its spots.
+function MapMarkers.Group(spots, width, height, scale, reach)
+    reach = reach or JOIN_PIXELS
+    local across, down = width * scale, height * scale
+    local limit = reach * reach
+    local groups = {}
+
+    for _, spot in ipairs(spots) do
+        local joined
+        for _, group in ipairs(groups) do
+            if group.kind == spot.kind then
+                local dx = (spot.x - group.ax) * across
+                local dy = (spot.y - group.ay) * down
+                if dx * dx + dy * dy < limit then
+                    joined = group
+                    break
+                end
+            end
+        end
+        if joined then
+            joined.spots[#joined.spots + 1] = spot
+        else
+            groups[#groups + 1] = { spots = { spot }, kind = spot.kind, ax = spot.x, ay = spot.y }
+        end
+    end
+
+    for _, group in ipairs(groups) do
+        local sx, sy = 0, 0
+        for _, spot in ipairs(group.spots) do sx, sy = sx + spot.x, sy + spot.y end
+        group.x, group.y = sx / #group.spots, sy / #group.spots
+    end
+    return groups
 end
 
 --- When a spot's node should be back (wall clock), from your own returns,
@@ -240,9 +340,27 @@ function MapMarkers.IsBack(spot, now)
     return back ~= nil and clock ~= nil and clock >= back
 end
 
+--- The node a joined pin is named for: the one gathered most there.
+function MapMarkers.GroupNode(group)
+    local times, best = {}, nil
+    for _, spot in ipairs(group.spots) do
+        local node = spot.node
+        if node then
+            times[node] = (times[node] or 0) + (tonumber(spot.gathers) or 1)
+            if not best or times[node] > times[best] or (times[node] == times[best] and node < best) then
+                best = node
+            end
+        end
+    end
+    return best
+end
+
 local function ShowTooltip(pin)
     local spot = pin.spot
     if not (spot and GameTooltip) then return end
+
+    local group = pin.group or MapMarkers.Single(spot)
+    if #group.spots > 1 then return MapMarkers.ShowGroupTooltip(pin, group) end
 
     pcall(GameTooltip.SetOwner, GameTooltip, pin, "ANCHOR_RIGHT")
 
@@ -281,6 +399,47 @@ local function ShowTooltip(pin)
     GameTooltip:Show()
 end
 
+--- A joined pin's hover: the node gathered most there, what the spots gave
+--- together, how many spots and gathers, and one line or two for when they
+--- grow back.
+function MapMarkers.ShowGroupTooltip(pin, group)
+    pcall(GameTooltip.SetOwner, GameTooltip, pin, "ANCHOR_RIGHT")
+
+    local fish = group.kind == "fish"
+    local title = MapMarkers.GroupNode(group) or L["Node"]
+    if fish and ns.Fishing and ns.Fishing.ShowName then
+        title = ns.Fishing.ShowName(title):gsub("^%l", string.upper)
+    end
+    GameTooltip:AddLine(title, Theme.Unpack("accent"))
+
+    for index, item in ipairs(MapMarkers.GroupItems(group)) do
+        if index > TOOLTIP_ITEMS then break end
+        local icon = MapMarkers.ItemIcon(item.name)
+        GameTooltip:AddLine(icon and ("|T%s:14:14|t %s"):format(tostring(icon), item.name) or item.name,
+            Theme.Unpack("text"))
+    end
+
+    local gathers, last = 0, nil
+    for _, spot in ipairs(group.spots) do
+        gathers = gathers + (tonumber(spot.gathers) or 1)
+        local when = tonumber(spot.last)
+        if when and (not last or when > last) then last = when end
+    end
+    local line = fish and L.Format("%d spots, fished %d times", #group.spots, gathers)
+        or L.Format("%d spots, gathered %d times", #group.spots, gathers)
+    local ago = MapMarkers.Ago(last, ns.Gathering.Clock())
+    if ago then line = L.Format("%s, last %s", line, ago) end
+    GameTooltip:AddLine(line, Theme.Unpack("text"))
+
+    if ns.Respawn and not fish then
+        for _, entry in ipairs(ns.Respawn:GroupLines(group.spots, ns.Gathering.Clock(), MapMarkers.GroupNode(group))) do
+            GameTooltip:AddLine(entry.text, Theme.Unpack(entry.known and "accent" or "muted"))
+        end
+    end
+
+    GameTooltip:Show()
+end
+
 local function HideTooltip()
     if GameTooltip then GameTooltip:Hide() end
 end
@@ -292,6 +451,8 @@ local function Complete(pin, size, corner)
     badge:SetPoint("CENTER", pin, corner, 0, 0)
     badge:SetTexture(CHECK)
     pin.badge = badge
+    -- Our own pin: the node tooltip (Logic/Respawn.lua) adds nothing to it.
+    pin.farmerMarker = true
 
     if pin.hollow then
         -- A minimap marker takes the mouse only on its check, never over
@@ -371,32 +532,68 @@ function MapMarkers.CreatePin(parent, size)
     icon:SetPoint("TOPLEFT", inset, -inset)
     icon:SetPoint("BOTTOMRIGHT", -inset, inset)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    pcall(icon.SetMask, icon, ROUND)
+    MapMarkers.RoundIcon(pin, icon)
     pcall(icon.SetDesaturated, icon, true)
-    icon:SetVertexColor(0.8, 0.8, 0.8)
+    icon:SetVertexColor(0.85, 0.85, 0.85)
+
+    -- How many spots a joined pin stands for, on a small dark disc with a
+    -- gold rim at the top right. Hidden on a pin of one.
+    local countSize = math.ceil(size * 0.68)
+    local countRim = pin:CreateTexture(nil, "OVERLAY", nil, 1)
+    countRim:SetSize(countSize, countSize)
+    countRim:SetPoint("CENTER", pin, "TOPRIGHT", -1, -1)
+    countRim:SetTexture(ROUND)
+    countRim:SetVertexColor(Theme.Unpack("accent"))
+    local countFill = pin:CreateTexture(nil, "OVERLAY", nil, 2)
+    countFill:SetPoint("TOPLEFT", countRim, "TOPLEFT", 1, -1)
+    countFill:SetPoint("BOTTOMRIGHT", countRim, "BOTTOMRIGHT", -1, 1)
+    countFill:SetTexture(ROUND)
+    countFill:SetVertexColor(0.1, 0.08, 0.05)
+    local count = Theme.CreateLabel(pin, "small", "accent", "CENTER")
+    count:SetPoint("CENTER", countRim, "CENTER", 0, 0)
+    count:SetDrawLayer("OVERLAY", 3)
 
     pin.ring, pin.icon = ring, icon
+    pin.count, pin.countRim, pin.countFill = count, countRim, countFill
     pin.hollow, pin.back = false, false
 
     return Complete(pin, size, "BOTTOMRIGHT")
 end
 
---- Point a marker at a spot. On the world map a node that should be back
---- shows in colour, at full strength and without its check.
+--- Point a marker at a spot, or on the world map at a joined pin's group
+--- (MapMarkers.Group). A pin turns to colour, at full strength and without
+--- its check, once any node it stands for should be back; it is as strong
+--- as its newest gather otherwise. A joined pin shows how many spots.
 function MapMarkers.Dress(pin, spot, now)
-    pin.spot = spot
+    local group = type(spot.spots) == "table" and spot or MapMarkers.Single(spot)
+    pin.group = group
+    pin.spot = group.spots[1]
     if pin.hollow then
-        pin:SetAlpha(MapMarkers.AlphaFor(spot.last, now))
+        pin:SetAlpha(MapMarkers.AlphaFor(pin.spot.last, now))
         return
     end
 
-    local back = MapMarkers.IsBack(spot, now)
-    pin.icon:SetTexture(MapMarkers.SpotIcon(spot))
+    local back, newest = false, nil
+    for _, member in ipairs(group.spots) do
+        if not back and MapMarkers.IsBack(member, now) then back = true end
+        local when = tonumber(member.last)
+        if when and (not newest or when > newest) then newest = when end
+    end
+
+    pin.icon:SetTexture(MapMarkers.GroupIcon(group))
     pcall(pin.icon.SetDesaturated, pin.icon, not back)
-    if back then pin.icon:SetVertexColor(1, 1, 1) else pin.icon:SetVertexColor(0.8, 0.8, 0.8) end
+    if back then pin.icon:SetVertexColor(1, 1, 1) else pin.icon:SetVertexColor(0.85, 0.85, 0.85) end
     pin.badge:SetShown(not back)
     pin.back = back
-    pin:SetAlpha(back and 1 or MapMarkers.AlphaFor(spot.last, now))
+    pin:SetAlpha(back and 1 or MapMarkers.AlphaFor(newest, now))
+
+    local many = #group.spots > 1
+    if pin.count then
+        pin.count:SetText(many and tostring(#group.spots) or "")
+        pin.count:SetShown(many)
+        pin.countRim:SetShown(many)
+        pin.countFill:SetShown(many)
+    end
 end
 
 --- A pool of markers under one parent, reused from one redraw to the next.
@@ -580,16 +777,22 @@ function MapMarkers:PlaceWorld(pool, view)
     local scale = 1 / view.scale
     local nextBack
 
-    for _, spot in ipairs(self:SpotsOn(view.mapID)) do
+    local groups = MapMarkers.Group(self:SpotsOn(view.mapID), view.width, view.height, view.scale)
+    for _, group in ipairs(groups) do
         local pin = Acquire(pool)
-        MapMarkers.Dress(pin, spot, now)
-        local back = not pin.back and MapMarkers.BackAt(spot)
-        if back and (not nextBack or back < nextBack) then nextBack = back end
+        MapMarkers.Dress(pin, group, now)
+        -- A grey pin turns to colour when its first node comes due.
+        if not pin.back then
+            for _, spot in ipairs(group.spots) do
+                local back = MapMarkers.BackAt(spot)
+                if back and (not nextBack or back < nextBack) then nextBack = back end
+            end
+        end
         pin:SetScale(scale)
         pin:SetFrameLevel(level)
         pin:ClearAllPoints()
         pin:SetPoint("CENTER", view.canvas, "TOPLEFT",
-            spot.x * view.width / scale, -spot.y * view.height / scale)
+            group.x * view.width / scale, -group.y * view.height / scale)
         pin:Show()
     end
 
