@@ -254,3 +254,16 @@ the same bug as of `16167e1`; not fixed there from here.
 
 **Sync rule: Keep Retail** for `DB:IsHiddenItem` unless Forever has fixed
 it the same way, then take Forever's.
+
+## 12. The loot table comes to the front for each mob
+
+`UI/LootTable.lua`: `LootTableUI:Show` calls `self.frame:Raise()` every
+time, not only when the window opens. The main window and the loot table
+are both `DIALOG` and top level, so a click on a Rankings row lifts the
+main window, and a second mob picked while the loot table was open drew
+behind it (the owner, 2026-10-24). Nothing saved changes. Test in
+`tools/test_loottable.lua`. Forever has the same bug as of `16167e1`; not
+fixed there from here.
+
+**Sync rule: Keep Retail** for the `Raise` line in `LootTableUI:Show`
+unless Forever has fixed it the same way, then take Forever's.
