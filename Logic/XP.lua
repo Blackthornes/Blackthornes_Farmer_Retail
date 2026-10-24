@@ -10,8 +10,8 @@
 -- events mark what moved, and the bar asks again only when it draws.
 --
 -- The level cap is the client's own (GetMaxLevelForPlayerExpansion, then
--- GetMaxPlayerLevel, then MAX_PLAYER_LEVEL), else 60: Forever's beta stops at
--- 30, and the owner said (2026-10-13) leveling goes to 60 at release.
+-- GetMaxPlayerLevel, then MAX_PLAYER_LEVEL), else 90, Retail's cap since
+-- Midnight (the owner asked 2026-10-24 that Farmer support it).
 --
 -- Saved, per character by GUID, in the account save as
 -- `xpProgress[guid]` (never rename it): played time and time on this level
@@ -26,7 +26,9 @@ local XP = ns.NewModule("XP")
 
 -- Classic's XP from each level to the next. The client says only the level
 -- you are on (UnitXPMax), so the levels after it are estimated from these,
--- scaled by how far Forever's number for this level is from Classic's.
+-- scaled by how far this client's number for this level is from Classic's.
+-- Levels past the chart (Retail goes on to 90) are taken as about what the
+-- level you are on needs, never less than the chart's last level.
 XP.TABLE = {
     400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600,
     8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200,
@@ -37,7 +39,7 @@ XP.TABLE = {
 }
 
 -- The cap when the client will not say.
-XP.CAP = 60
+XP.CAP = 90
 -- Kills no more than this many seconds apart make a streak, as the kills
 -- panel's do.
 XP.STREAK_GAP = 60
@@ -86,7 +88,7 @@ local function Clock()
     return Call(_G.time) or 0
 end
 
---- The level cap: the client's, else 60.
+--- The level cap: the client's, else 90.
 function XP.MaxLevel()
     for _, name in ipairs({ "GetMaxLevelForPlayerExpansion", "GetMaxPlayerLevel" }) do
         local cap = Call(_G[name])
@@ -122,12 +124,16 @@ end
 --- XP from `level` to the next: Classic's, scaled to this client by the
 --- level you are on.
 function XP.Needed(level, state)
-    local classic = XP.TABLE[level]
-    if not classic then return nil end
+    level = tonumber(level)
+    if not level or level < 1 then return nil end
     state = state or XP.Read()
     local scale = 1
     if state and XP.TABLE[state.level] then scale = state.max / XP.TABLE[state.level] end
-    return math.floor(classic * scale + 0.5)
+    local classic = XP.TABLE[level]
+    if classic then return math.floor(classic * scale + 0.5) end
+    if not state then return nil end
+    local last = XP.TABLE[#XP.TABLE] * scale
+    return math.floor(math.max(state.max, last) + 0.5)
 end
 
 --------------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 -- What matters: XP gained is counted across a level-up; a kill's chat line
 -- gives the mob and its XP, and from it how many more kills finish the
 -- level; finished quests in the log add up, and when they cover the rest of
--- the level the bar says so; the cap is the client's, else 60; a tenth of
+-- the level the bar says so; the cap is the client's, else 90 (Retail's); a tenth of
 -- the level crossed chimes once, and not when the chime is off; the time a
 -- level took is kept by GUID and a fast one is cheered; the bar hides at the
 -- cap and when turned off; the game's bar is made see-through, never
@@ -67,7 +67,7 @@ end
 -- The cap
 --------------------------------------------------------------------------------
 
-suite.check("the cap is 60 when the client will not say", XP.MaxLevel() == 60, XP.MaxLevel())
+suite.check("the cap is 90 when the client will not say", XP.MaxLevel() == 90, XP.MaxLevel())
 _G.GetMaxPlayerLevel = function() return 30 end
 suite.check("the client's cap wins", XP.MaxLevel() == 30, XP.MaxLevel())
 _G.GetMaxLevelForPlayerExpansion = function() error("secret") end
@@ -265,6 +265,20 @@ Bar.Cheer = cheer
 player.level, player.xp, player.max = 58, 0, 202300
 summary = XP:Summary()
 suite.check("XP to the cap counts 58 and 59", summary.toCapXP == 202300 + 209800, summary.toCapXP)
+
+-- Retail goes on to 90, past Classic's chart: each later level counts about
+-- what the level you are on needs, never nothing.
+_G.MAX_PLAYER_LEVEL = 90
+player.level, player.xp, player.max = 82, 100000, 600000
+summary = XP:Summary()
+suite.check("the cap is Retail's 90", summary.cap == 90, summary.cap)
+suite.check("XP to 90 counts 83 to 89 too", summary.toCapXP == 500000 + 7 * 600000, summary.toCapXP)
+player.level, player.xp, player.max = 58, 0, 202300
+summary = XP:Summary()
+suite.check("from 58 the levels past the chart count the chart's last",
+    summary.toCapXP == 202300 + 31 * 209800, summary.toCapXP)
+suite.check("a level past the chart is never nothing", (XP.Needed(75) or 0) > 0, XP.Needed(75))
+_G.MAX_PLAYER_LEVEL = 60
 
 player.level = 60
 Bar:Refresh()

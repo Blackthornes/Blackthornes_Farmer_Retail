@@ -33,7 +33,7 @@ local Grinding = ns.NewModule("Grinding")
 local Util = ns.Util
 
 -- The level steppers' range. The top is the game's level cap, never under
--- 60: mobs up to 60 are in the data even while the beta stops at 30.
+-- 60 (the game says 90 on Retail).
 Grinding.MIN_LEVEL = 1
 Grinding.MAX_LEVEL = 60
 

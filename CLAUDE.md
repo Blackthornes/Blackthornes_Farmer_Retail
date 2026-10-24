@@ -41,6 +41,12 @@ ever touch the Forever addon. So:
   `UI/GatherToCap.lua`), built on Classic's 1 to 300 skill ladder. Their
   Settings rows and commands show only where they are loaded. A Retail
   version of either is its own job, on the owner's yes.
+- The level cap is the game's (`XP.MaxLevel`), 90 on Retail since
+  Midnight (the owner asked 2026-10-24). `XP.CAP` (the fallback when the
+  game won't say) is 90 here, not Forever's 60, and the Grind tab's level
+  boxes reach it. `XP.Needed` takes a level past Classic's 1 to 60 chart
+  as about what the current level needs, so "Level 90 in about X" counts
+  every level. Tested in `tools/test_xpbar.lua` and `tools/test_grinding.lua`.
 - The rest of this file describes the Forever addon; read it as the
   starting point, not as what Retail has.
 
