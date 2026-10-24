@@ -67,6 +67,23 @@ ever touch the Forever addon. So:
   boxes reach it. `XP.Needed` takes a level past Classic's 1 to 60 chart
   as about what the current level needs, so "Level 90 in about X" counts
   every level. Tested in `tools/test_xpbar.lua` and `tools/test_grinding.lua`.
+- Map pins with item icons (the owner said build it, 2026-10-24, from a
+  mockup): a world map marker (`UI/MapMarkers.lua`) shows the game's icon
+  for the item its spot gave most (`MapMarkers.SpotItems`, `SpotIcon`,
+  `ItemIcon` through `C_Item.GetItemIconByID`; a spot from before reads its
+  node's record, else the plain herb, ore or fish), greyed until your own
+  grow-back time (`Logic/Respawn.lua`) says it is back, then in colour
+  without its check (`BackAt`, `IsBack`, redrawn by itself at
+  `worldNextBack`). The minimap stays the hollow frame. The hover lists
+  what the spot gave. Spots keep `items[name] = count` and `also[name]`
+  (never rename either). Fishing marks where you stood (`kind = "fish"`,
+  named for the school or `Fishing.OPEN_WATER`, from `Fishing:OnLoot`);
+  it never teaches a grow-back time and stays grey. A herb or vein within
+  `Gathering.NEAR_YARDS` (about 3 meters) of a spot of its kind joins it
+  whatever its name (`Gathering.Joins`), teaching nothing about the
+  spot's own time; older saves that close draw as one, the newest
+  (`Gathering.Joined`; the save is unchanged). Tested in
+  `tools/test_mapicons.lua`. Not yet seen in game.
 - The rest of this file describes the Forever addon; read it as the
   starting point, not as what Retail has.
 

@@ -158,7 +158,8 @@ end
 --- Has a node of this name been marked on this map?
 function Respawn:Gathered(mapID, node)
     for _, spot in ipairs(ns.Gathering:SpotsOn(mapID)) do
-        if spot.node == node then return true end
+        if spot.kind ~= "fish" and (spot.node == node
+            or (type(spot.also) == "table" and spot.also[node])) then return true end
     end
     return false
 end
