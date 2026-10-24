@@ -63,8 +63,14 @@ ever touch the Forever addon. So:
   account wide in `roadToMax` (`[guid] = { lines, pace }`, `newest`; never
   rename it). `UI/Grinding.lua` draws `ns.RoadToMaxUI or ns.GatherToCapUI`.
   Zones are matched by English name, so other languages match fewer.
-  The line IDs and continents are not yet seen in game. Tested in
-  `tools/test_roadtomax.lua`.
+  The line IDs and continents are not yet seen in game. With every
+  profession window shut Retail gives 0 of 0 by line ID (seen in game
+  2026-10-24), so skills come from the Professions book
+  (`RoadToMax:ReadBook`, `GetProfessionInfo`'s line name). Herbs or ore
+  gathered off a mob's corpse (Retail lets you) are not nodes: marked
+  `creature = true` in `gathering.nodes` (never rename it), else told by
+  the kill tally (`Gathering:FromCreature`), and left out of the Grind
+  list, the road and the map pins. Tested in `tools/test_roadtomax.lua`.
 - The level cap is the game's (`XP.MaxLevel`), 90 on Retail since
   Midnight (the owner asked 2026-10-24). `XP.CAP` (the fallback when the
   game won't say) is 90 here, not Forever's 60, and the Grind tab's level

@@ -149,6 +149,29 @@ ladder, the Show the Way or Set Goal buttons, how `PlacePath` makes room),
 **Blend** it into the RoadToMax files and say so. Keep the wraps working if
 Forever changes `Gathering:Record` or `GrindGather:NoteSkin`'s arguments.
 
+Skills (fixed after the first look in game, 2026-10-24): with every
+profession window shut, Retail gives 0 of 0 for each line by its ID, so the
+road reads the game's Professions book (`GetProfessionInfo`, its line name
+such as "Classic Herbalism") through `RoadToMax:ReadBook`, matched to an
+expansion by the client's own line names (`LineExpansion`), else the English
+word (`LINE_WORDS`). A window open adds `GetChildProfessionInfos`.
+Midnight's line before a window names it is kept as `"Herbalism|midnight"`
+in `roadToMax[guid].lines`.
+
+## 6b. Herbs and ore off a mob's corpse (Retail)
+
+Retail lets herbalists and miners gather some mobs (Timberlings,
+elementals). `Logic/Gathering.lua`: `Gathering.CorpseWindow`,
+`Gathering:IsCreatureName`, `Gathering:FromCreature` and the lines in
+`Gathering:OnLoot` that mark such a record `creature = true` (never rename
+it) and put no map spot down. `Logic/GrindGather.lua`'s `Zones` and
+`RoadToMax`'s `OwnGathering` leave them out; `UI/MapMarkers.lua`'s
+`SpotsOn` draws no pin for a spot named for a mob you killed. Records are
+never rewritten. Tested in `tools/test_roadtomax.lua`.
+
+**Sync rule: Blend.** Keep these lines if Forever changes `OnLoot`,
+`GrindGather:Zones` or `SpotsOn`.
+
 ## 7. Item icons on map pins, fishing pins, nearby nodes join (PR #10)
 
 `UI/MapMarkers.lua`: `ItemIcon`, `NodeItems`, `SpotItems`, `SpotIcon`,

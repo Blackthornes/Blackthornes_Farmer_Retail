@@ -705,7 +705,12 @@ function MapMarkers:SpotsOn(mapID)
     if kept and kept.map == mapID and kept.version == version and kept.all == all then
         return kept.spots
     end
-    local spots = ns.Gathering.Joined(ns.Gathering:SpotsOn(mapID))
+    -- A herb picked off a mob's corpse before is no node: no pin (Retail).
+    local nodes = {}
+    for _, spot in ipairs(ns.Gathering:SpotsOn(mapID)) do
+        if not ns.Gathering:IsCreatureName(spot.node) then nodes[#nodes + 1] = spot end
+    end
+    local spots = ns.Gathering.Joined(nodes)
     self.spotsKept = { map = mapID, version = version, all = all, spots = spots }
     return spots
 end
