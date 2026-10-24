@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.46.0
+
+The first Farmer for Retail WoW (interface 120105).
+
+- This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.
+- Farmer counts every kill and drop you loot, so a mob's worth comes from your own play. Looting a whole pack at once counts every corpse.
+- Rankings lists mobs by what a kill is worth. If you use TradeSkillMaster or Auctionator, drops are priced from their auction prices.
+- Search any item, zone or mob to see where you found it. Set a goal and a gold arrow leads you there.
+- The Stats tab turns your farming into charts: gold an hour, where your gold came from and your best mobs.
+- The Open button opens clams, sacks and lockboxes, and Farmer counts what comes out.
+- Herbs, ore and fishing spots are marked on your map and minimap.
+
 ## 0.45.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so

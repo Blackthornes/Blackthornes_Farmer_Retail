@@ -31,6 +31,27 @@ ignore:
   # his save once; in a player's install it would pour his kills into theirs.
   # The TOC line that loads it is fenced with #@do-not-package@ to match.
   - Data/Harvest_Carryover.lua
+  # Forever and Classic data, and Forever-only features, that the Retail TOC
+  # never loads. They stay in the repo so Forever changes merge cleanly.
+  - Data/NpcNames.lua
+  - Data/ForeverNpcNames.lua
+  - Data/Data_Mining.lua
+  - Data/Data_Herbalism.lua
+  - Data/Data_Cloth.lua
+  - Data/Data_Leather.lua
+  - Data/Data_Misc.lua
+  - Data/Data_MobDrops.lua
+  - Data/Data_ClassicDrops.lua
+  - Data/Data_Harvested.lua
+  - Logic/Contribute.lua
+  - Logic/Legacy.lua
+  - Data/Travel.lua
+  - Data/TravelZones.lua
+  - Logic/Travel.lua
+  - UI/TravelCard.lua
+  - UI/TravelMap.lua
+  - Logic/GatherToCap.lua
+  - UI/GatherToCap.lua
 
 license-output: LICENSE
 
