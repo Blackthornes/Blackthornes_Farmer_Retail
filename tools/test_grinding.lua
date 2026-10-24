@@ -84,8 +84,8 @@ low, high = Grinding:Range()
 check("and kept", low == 22 and high == 26 and not Grinding:FollowsLevel(), low .. "-" .. high)
 Grinding:SetRange(28, 45)
 check("a band past 30 is kept", select(2, Grinding:Range()) == 45)
-Grinding:SetRange(55, 70)
-check("never past the level cap", select(2, Grinding:Range()) == 60)
+Grinding:SetRange(55, 95)
+check("never past the level cap, Retail's 90", select(2, Grinding:Range()) == 90)
 Grinding:FollowLevel()
 check("My level goes back to following", Grinding:FollowsLevel())
 
@@ -280,8 +280,8 @@ ns.HandleSlash("grind any me")
 check("any clears the filters", Grinding:Type() == nil and Grinding:Gives() == nil)
 check("me follows your level", Grinding:FollowsLevel())
 
-ns.HandleSlash("grind 61 70")
-check("a typed band is held to the cap", ns.db.grindMin == 60 and ns.db.grindMax == 60)
+ns.HandleSlash("grind 91 99")
+check("a typed band is held to the cap", ns.db.grindMin == 90 and ns.db.grindMax == 90)
 
 --------------------------------------------------------------------------------
 -- The tab
