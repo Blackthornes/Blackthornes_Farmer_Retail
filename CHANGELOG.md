@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.47.0
+
+For WoW Retail (interface 120105).
+
+- This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.
+- The Ore, Herbs and Leather views on the Grind tab show your whole road from level 1 to the max, one expansion at a time, from Classic to Midnight. Your skill shows in each one, and Farmer tells you about how many more gathers you need.
+- Map pins show the icon of the item that spot gave you most. A pin stays grey until the spot has grown back.
+- Fishing spots are marked on your map too.
+- Nodes that are close together join into one pin. On the world map, pins that sit on top of each other join into one pin with a count.
+- The gold arrow moves on to the next spot when you reach a node that isn't up yet.
+
+Fixes and changes:
+
+- Various bug fixes.
+
 ## 0.46.0
 
 The first Farmer for Retail WoW (interface 120105).
