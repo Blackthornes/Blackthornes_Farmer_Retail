@@ -435,7 +435,7 @@ suite.check("a corpse gets nothing while it is off", Face("Dire Mottled Boar", C
 ns.HandleSlash("sparkle corpses on")
 suite.check("corpses on is saved", ns.db.nodeSparkleCorpses == true)
 suite.check("a skinnable corpse sparkles", Face("Dire Mottled Boar", CORPSE) == "shown")
-suite.check("in your Skinning's colour", NodeSparkle.tint == C.orange)
+suite.check("in gold, with no Skinning by level on Retail", NodeSparkle.tint == NodeSparkle.GOLD)
 suite.check("its plate stays on", NodeSparkle:FitPlateToTarget() == "1")
 dead = false
 suite.check("a live beast does not", Face("Dire Mottled Boar", CORPSE) == "nothing")

@@ -1238,8 +1238,6 @@ L["%s in %s"] = "%s в %s"
 L["A gather"] = "За сбор"
 L["AN HOUR"] = "В ЧАС"
 L["An hour"] = "В час"
-L["Click a camp to point the arrow there. The Skinning a mob needs comes from its level."] =
-    "Щёлкни по месту, и стрелка укажет туда. Нужный навык снятия шкур зависит от уровня противника."
 L["Click a node to point the arrow at the spots you marked for it. Levels are the zone's levels."] =
     "Щёлкни по жиле или траве, и стрелка укажет на места, что ты для неё отметил. Уровни взяты по зоне."
 L["Click to point the arrow at your spots."] = "Щёлкни, чтобы стрелка указала на твои места."

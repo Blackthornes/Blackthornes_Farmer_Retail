@@ -297,3 +297,21 @@ which have no Retail version yet (the owner approved the words,
 **Sync rule: Blend.** Take Forever's changes to these files and keep these
 lines. A new Forever string that names Forever, Classic or a sister addon
 gets Retail words, shown to the owner first.
+
+## 14. No Skinning by level
+
+Retail lets any mob in an expansion's zones be skinned with that
+expansion's Skinning, so Classic's rule (`Grinding.SkinSkill`, five points
+a level) read "400, you have 25" on a level 80 mob and turned skinnable
+corpses grey (the owner said fix it, 2026-10-27).
+
+- `UI/Grinding.lua`: the `leather` layout has no `skill` column;
+  `GrindingUI.SkinNeed` gives only the data's `skinSkill`; the Leather
+  footer uses the Cloth view's words (the "comes from its level" key is
+  gone from every `Locale/*.lua`).
+- `UI/NodeSparkle.lua` `ColorFor`: a corpse is always `GOLD`.
+- Tests: `tools/test_grindgather.lua`, `tools/test_nodesparkle.lua`.
+  `Grinding.SkinSkill` itself stays (Gather to cap, Forever only, reads it).
+
+**Sync rule: Keep Retail** for these lines; Blend any other Forever change
+to the Leather view or the sparkles.

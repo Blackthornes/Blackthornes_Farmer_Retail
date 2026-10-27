@@ -1235,8 +1235,6 @@ L["%s in %s"] = "%2$s的%1$s"
 L["A gather"] = "一次采集"
 L["AN HOUR"] = "每小时"
 L["An hour"] = "每小时"
-L["Click a camp to point the arrow there. The Skinning a mob needs comes from its level."] =
-    "点击一个营地，箭头就会指向那里。怪物需要的剥皮技能取决于它的等级。"
 L["Click a node to point the arrow at the spots you marked for it. Levels are the zone's levels."] =
     "点击一个资源点，箭头就会指向你为它标记的地点。等级是这个区域的等级。"
 L["Click to point the arrow at your spots."] = "点击让箭头指向你的地点。"

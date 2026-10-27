@@ -1236,8 +1236,6 @@ L["%s in %s"] = "%s in %s"
 L["A gather"] = "Ein Sammelvorgang"
 L["AN HOUR"] = "PRO STUNDE"
 L["An hour"] = "Pro Stunde"
-L["Click a camp to point the arrow there. The Skinning a mob needs comes from its level."] =
-    "Klicke ein Lager an, damit der Pfeil dorthin zeigt. Die Kürschnerei, die ein Gegner braucht, richtet sich nach seiner Stufe."
 L["Click a node to point the arrow at the spots you marked for it. Levels are the zone's levels."] =
     "Klicke ein Vorkommen an, damit der Pfeil auf die Fundorte zeigt, die du dafür markiert hast. Die Stufen sind die des Gebiets."
 L["Click to point the arrow at your spots."] = "Klicken, damit der Pfeil auf deine Fundorte zeigt."
