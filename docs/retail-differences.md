@@ -267,3 +267,33 @@ fixed there from here.
 
 **Sync rule: Keep Retail** for the `Raise` line in `LootTableUI:Show`
 unless Forever has fixed it the same way, then take Forever's.
+
+## 13. No Forever or sister-addon words on Retail
+
+Retail players never read about Forever, Classic or the sister addons,
+which have no Retail version yet (the owner approved the words,
+2026-10-27).
+
+- `Core/SisterNote.lua`: `Note.ON_RETAIL` and `Note:Listed()`; `ToName`
+  reads `Listed`, so the login chat line names no sister without a Retail
+  version. Add a folder to `ON_RETAIL` when one ships for Retail.
+  `tools/test_sisternote.lua` sets it to nil for Forever's checks and adds
+  a Retail check.
+- `UI/About.lua`: the BLACKTHORNES ADDONS list reads `Sisters:Listed()`
+  and shows only with more than Farmer in it; the third `THANKS` paragraph
+  is Retail's ("Farmer is new on Retail...").
+- `UI/Settings.lua`: no "Craft or Sell:" row (it needs Tradeskills;
+  `/farm tooltip craft` still answers); the TSM and Auctionator hover no
+  longer names Tradeskills.
+- `UI/Main.lua` search footer is "Click a row to put it in chat.";
+  `UI/LootTable.lua` and `UI/Rankings.lua` name TSM or Auctionator when no
+  price addon is loaded; `Logic/Value.lua` `/farm value` help says
+  "at auction prices"; `Data/Database.lua` `PROVENANCE.forever` is "from
+  your own play"; `Logic/Search.lua` `/farm data` drops the "Classic spots"
+  line. The same keys in every `Locale/*.lua`.
+
+`SisterNote.lua` and `About.lua` are otherwise the shared files.
+
+**Sync rule: Blend.** Take Forever's changes to these files and keep these
+lines. A new Forever string that names Forever, Classic or a sister addon
+gets Retail words, shown to the owner first.

@@ -1316,7 +1316,7 @@ function RankingsUI:PriceText()
     elseif source then
         return L["TSM or Auctionator auction prices"]
     end
-    return L["vendor prices, Tradeskills not loaded"]
+    return L["vendor prices, no TSM or Auctionator"]
 end
 
 --- A click on a heading: the board already built, in the new order, from

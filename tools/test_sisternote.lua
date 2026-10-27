@@ -64,6 +64,8 @@ local function Addon(folder, db)
     function ns.Debug() end
     assert(loadfile(lfs_cwd .. "/Core/SisterNote.lua"))(folder, ns)
     ns.db = db
+    -- Forever's rule (every sister named) unless a check asks for Retail's.
+    ns.SisterNote.ON_RETAIL = nil
     return ns
 end
 
@@ -178,6 +180,21 @@ butler = Addon("Blackthornes_Butler", {})
 Login({ butler })
 Fire()
 check("a client that will not say gives no line", #chat == 0, chat[1])
+
+--------------------------------------------------------------------------------
+-- Retail: only sisters made for Retail
+--------------------------------------------------------------------------------
+
+installed = { Blackthornes_Farmer = "loaded" }
+Client()
+local retailDB = {}
+local retail = Addon("Blackthornes_Farmer", retailDB)
+retail.SisterNote.ON_RETAIL = { Blackthornes_Farmer = true }
+Login({ retail })
+Fire()
+check("Retail names no sister that has no Retail version", #chat == 0, chat[1])
+check("and marks none as named", retailDB.sisterNoteTold == nil)
+check("its list is Farmer alone", #retail.SisterNote:Listed() == 1)
 
 for key, value in pairs(saved) do _G[key] = value end
 print(("  sisternote: %d checks passed"):format(suite.checks))

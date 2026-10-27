@@ -708,7 +708,7 @@ function LootTableUI:Render()
     elseif source then
         self.footer:SetText(L["Prices: TSM or Auctionator market value, or the vendor price if higher."])
     else
-        self.footer:SetText(L["Prices: vendor price. Load Blackthornes Tradeskills for market prices."])
+        self.footer:SetText(L["Prices: vendor price. Load TSM or Auctionator for market prices."])
     end
 
     self:DressMap()

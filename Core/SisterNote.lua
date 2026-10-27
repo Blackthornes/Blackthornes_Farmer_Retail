@@ -46,6 +46,22 @@ Note.ADDONS = {
       adds = L["what to do with every item in your bags"] },
 }
 
+-- Retail (this copy only): only the sisters made for Retail are named, in
+-- chat and on the About page. Farmer is the only one so far; add a folder
+-- here when a sister ships for Retail. Nil names every sister, as Forever does.
+Note.ON_RETAIL = { Blackthornes_Farmer = true }
+
+--- The sisters this copy may name, in house order.
+function Note:Listed()
+    local only = self.ON_RETAIL
+    if type(only) ~= "table" then return self.ADDONS end
+    local list = {}
+    for _, entry in ipairs(self.ADDONS) do
+        if only[entry.folder] then list[#list + 1] = entry end
+    end
+    return list
+end
+
 local shared = _G.BlackthornesSisterNote
 if type(shared) ~= "table" then
     shared = {}
@@ -126,7 +142,7 @@ function Note:ToName()
     end
 
     local list = {}
-    for _, entry in ipairs(self.ADDONS) do
+    for _, entry in ipairs(self:Listed()) do
         if not told[entry.folder] and Note.State(entry.folder) == "missing" then
             list[#list + 1] = entry
         end

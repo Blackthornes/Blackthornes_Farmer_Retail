@@ -468,7 +468,7 @@ function UI:BuildBody()
     footer:SetHeight(26)
     footer:SetWordWrap(true)
     footer:SetJustifyV("MIDDLE")
-    footer:SetText(L["Unmarked spots are from Classic and not yet seen on Forever. Click a row to put it in chat."])
+    footer:SetText(L["Click a row to put it in chat."])
     self.footer = footer
 
     self:BuildEmpty()

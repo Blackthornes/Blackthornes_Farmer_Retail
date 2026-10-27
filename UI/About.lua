@@ -37,7 +37,7 @@ About.NOTE = {
 About.THANKS = {
     L["Thank you to everyone who sent ideas and bug reports. You helped shape every one of these add-ons. Without you, they would not be what they are today."],
     L["There are still some bugs to work out, and those fixes will come with time. If you find one, jump on our Discord and share it. You can find the link on the About page in Settings. Every message gets read."],
-    L["WoW Forever is almost here, and we can't wait. We look forward to building and improving these add-ons with you from here on."],
+    L["Farmer is new on Retail, and we're glad you're here. We look forward to building and improving it with you from here on."],
 }
 
 -- The name each addon goes by, for "Blackthornes Farmer 0.31.0".
@@ -212,10 +212,13 @@ function About:Info(parent, width)
     end
 
     local Sisters = ns.SisterNote
-    if Sisters and type(Sisters.ADDONS) == "table" then
+    -- Retail lists only sisters made for Retail, and none while Farmer is
+    -- the only one (Sisters:Listed).
+    local listed = Sisters and (Sisters.Listed and Sisters:Listed() or Sisters.ADDONS)
+    if type(listed) == "table" and #listed > 1 then
         y = y + GAP + 4
         y = Words(holder, y, width, L["BLACKTHORNES ADDONS"], "tiny", "accent")
-        for _, entry in ipairs(Sisters.ADDONS) do
+        for _, entry in ipairs(listed) do
             y = y + 5
             local state = Sisters.State and Sisters.State(entry.folder)
             local status = state == "loaded" and L["installed"]

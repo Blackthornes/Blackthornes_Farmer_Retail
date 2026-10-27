@@ -880,7 +880,7 @@ function SettingsUI:BuildLootPage()
     pages:Section("loot", 1, L["PRICES"])
 
     local otherRow = pages:Row("loot", 1, L["TSM and Auctionator:"],
-        L["Prices your drops with TradeSkillMaster or Auctionator when Tradeskills isn't loaded."])
+        L["Prices your drops with TradeSkillMaster or Auctionator."])
 
     controls.otherPriceAddons = Widgets.CreateCheckbox(otherRow, L["On"], function(checked)
         ns.Value:SetUsesOtherAddons(checked)
@@ -1076,13 +1076,8 @@ function SettingsUI:BuildMapPage()
             if ns.ItemTooltip then ns.ItemTooltip.ForgetKept() end
         end)
 
-    -- What crafting a material pays for your time, from Tradeskills
-    -- (the owner said yes, 2026-10-15).
-    local craftRow = pages:Row("map", 1, L["Craft or Sell:"],
-        L["With Tradeskills, a material shows what an hour of farming it pays, sold or crafted."])
-    controls.itemTooltipCraft = TooltipShiftStepper(craftRow, "craftOrSell",
-        function() return ns.db.itemTooltipCraft ~= false end,
-        function(on) ns.ItemTooltip:SetCraftEnabled(on) end)
+    -- Retail has no "Craft or Sell:" row: it needs Tradeskills, which has
+    -- no Retail version yet. `/farm tooltip craft` still answers.
 
     local killRow = pages:Row("map", 1, L["Kill Count:"],
         L["Hover a mob to see how many you've killed."])
@@ -1429,7 +1424,7 @@ function SettingsUI:Refresh()
     controls.nodeSparkleHideIcon:SetChecked(db.nodeSparkleHideIcon ~= false)
     controls.nodeSparkleColors:SetChecked(db.nodeSparkleColors ~= false)
     controls.nodeSparkleCorpses:SetChecked(db.nodeSparkleCorpses == true)
-    for _, name in ipairs({ "itemTooltip", "itemTooltipCraft", "killTooltip", "killTooltipDrops" }) do
+    for _, name in ipairs({ "itemTooltip", "killTooltip", "killTooltipDrops" }) do
         local stepper = controls[name]
         stepper:SetValue(ns.TooltipShift:Mode(stepper.isOn(), stepper.shiftKey), true)
     end
