@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.47.1
+
+For WoW Retail (interface 120105).
+
+- This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.
+
+Fixes and changes:
+
+- Various bug fixes.
+
 ## 0.47.0
 
 For WoW Retail (interface 120105).
