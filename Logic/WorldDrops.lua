@@ -135,7 +135,10 @@ function WorldDrops.Inside(zone)
     if type(inside) ~= "table" or type(zone) ~= "string" then return false end
     if inside[zone] then return true end
     local english = ns.Spots.English and ns.Spots.English(zone)
-    return english ~= nil and inside[english] ~= nil
+    if english ~= nil and inside[english] ~= nil then return true end
+    -- Retail's dungeons and raids, learned as you kill there.
+    local learned = ns.Spots.LearnedInstance
+    return learned ~= nil and (learned(zone) or (english ~= nil and learned(english))) or false
 end
 
 --- The band a harvest record counts in, or nil when it does not count.

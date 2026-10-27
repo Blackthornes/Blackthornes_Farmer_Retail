@@ -218,8 +218,42 @@ function Spots.IsInstance(place)
     if type(place) ~= "string" or place == "" then return false end
     place = Spots.English(place)
     if CAPITALS[place] then return false end
+    if Spots.LearnedInstance(place) then return true end
     if (ZONE_DATA.instances or {})[place] then return true end
     return INSIDE[place] ~= nil
+end
+
+-- Retail: the lists above know only Classic's dungeons, so each dungeon or
+-- raid the game says you are in when you kill there is kept account wide in
+-- `instanceZones[English name] = true` (never rename it).
+Spots.INSTANCE_TYPES = { party = true, raid = true }
+
+--- Is `place` (English) a dungeon or raid you have killed in?
+function Spots.LearnedInstance(place)
+    local kept = ns.db and ns.db.instanceZones
+    return type(kept) == "table" and type(place) == "string" and kept[place] == true
+end
+
+--- A kill: keep the place when the game says it is a dungeon or raid.
+--- Only a sure yes counts; a client that will not say keeps nothing.
+function Spots:NoteInstance()
+    local db = ns.db
+    if type(db) ~= "table" or type(IsInInstance) ~= "function" then return false end
+    local ok, inside, kind = pcall(IsInInstance)
+    if not ok then return false end
+    local sure, yes = pcall(function()
+        return (inside == true or inside == 1) and Spots.INSTANCE_TYPES[kind] == true
+    end)
+    if not (sure and yes) then return false end
+    local zone = ns.Harvest:Where()
+    if type(zone) ~= "string" or zone == "" then return false end
+    zone = Spots.English(zone) or zone
+    if CAPITALS[zone] or Spots.LearnedInstance(zone) then return false end
+    if type(db.instanceZones) ~= "table" then db.instanceZones = {} end
+    db.instanceZones[zone] = true
+    -- Rankings and the rank-up order look again.
+    if ns.Rankings then ns.Rankings.outsideVersion = (ns.Rankings.outsideVersion or 0) + 1 end
+    return true
 end
 
 --- Is `zone` a place the map knows by its English name?

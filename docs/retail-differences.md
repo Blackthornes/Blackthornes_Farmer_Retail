@@ -320,3 +320,21 @@ corpses grey (the owner said fix it, 2026-10-27).
 
 **Sync rule: Keep Retail** for these lines; Blend any other Forever change
 to the Leather view or the sparkles.
+
+## 15. Dungeons learned as you kill
+
+The lists in `Logic/Spots.lua` and `Data/Zones.lua` know only Classic's
+dungeons, so Retail's counted as open world for "Outside dungeons only"
+and World drops (the owner said fix it, 2026-10-27).
+
+- `Logic/Spots.lua`: `Spots.INSTANCE_TYPES` (party, raid),
+  `Spots.LearnedInstance`, `Spots:NoteInstance` (keeps the zone in
+  `instanceZones[English name] = true`, account wide, never rename it;
+  moves `Rankings.outsideVersion`); `Spots.IsInstance` reads it.
+- `Logic/Tracker.lua` `Tracker:Record`: each new kill calls
+  `Spots:NoteInstance` in a pcall.
+- `Logic/WorldDrops.lua` `WorldDrops.Inside`: reads it too.
+- Test in `tools/test_rankingsoutside.lua`.
+
+**Sync rule: Keep Retail** for these lines; Blend Forever's changes around
+them.
