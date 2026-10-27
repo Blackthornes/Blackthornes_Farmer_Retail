@@ -292,6 +292,11 @@ which have no Retail version yet (the owner approved the words,
   your own play"; `Logic/Search.lua` `/farm data` drops the "Classic spots"
   line. The same keys in every `Locale/*.lua`.
 
+- `UI/Main.lua` `UI.SHOW_BADGE` and `UI/Grinding.lua`
+  `GrindingUI.SHOW_BADGE` are false: no green [Forever] badge on search or
+  Grind rows (every Retail row is your own play). `tools/test_textfit.lua`
+  checks Forever's badge slot with it turned on.
+
 `SisterNote.lua` and `About.lua` are otherwise the shared files.
 
 **Sync rule: Blend.** Take Forever's changes to these files and keep these

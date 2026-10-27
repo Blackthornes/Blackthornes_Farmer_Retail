@@ -136,10 +136,19 @@ UI:FitColumns({ { type = "source", source = far } })
 suite.check("the where column grows past 400 for a long place", UI.columns.where.w > 400,
     UI.columns.where.w)
 
--- The [Forever] badge sat over the end of the drop column, on a long
--- "needs" text; it has a slot of its own now, as wide as its text.
+-- Retail shows no badge: its slot stays narrow.
 UI:FitColumns({ { type = "source", source = { kind = "node", name = "Copper Vein",
     zone = "Durotar", requires = "Mining 1", provenance = "forever" } } })
+suite.check("Retail keeps no room for a badge", UI.columns.badge.w < Theme.TextWidth("tiny", "Forever"),
+    UI.columns.badge.w)
+
+-- The [Forever] badge sat over the end of the drop column, on a long
+-- "needs" text; it has a slot of its own now, as wide as its text.
+-- (Forever's layout, checked with the badge on.)
+UI.SHOW_BADGE = true
+UI:FitColumns({ { type = "source", source = { kind = "node", name = "Copper Vein",
+    zone = "Durotar", requires = "Mining 1", provenance = "forever" } } })
+UI.SHOW_BADGE = false
 columns = UI.columns
 suite.check("the badge's slot starts after the drop column",
     columns.badge.x >= columns.drop.x + columns.drop.w, columns.badge.x)
