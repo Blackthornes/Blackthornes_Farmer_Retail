@@ -43,7 +43,9 @@ local CHROME = 74
 -- The columns each view shows, left to right.
 GrindingUI.LAYOUTS = {
     mobs = { "type", "mob", "level", "gives", "worth", "badge" },
-    leather = { "type", "mob", "level", "skill", "gives", "worth", "count", "badge" },
+    -- Retail: no SKILL column. Any mob in an expansion's zones can be
+    -- skinned with that expansion's Skinning, so no number by level fits.
+    leather = { "type", "mob", "level", "gives", "worth", "count", "badge" },
     nodes = { "mob", "skill", "gives", "count", "spots", "respawn", "worth", "hour" },
     fish = { "mob", "count", "gives", "worth", "hour" },
 }
@@ -65,6 +67,8 @@ GrindingUI.WIDTH = 980
 GrindingUI.ARROW_ROOM = 16
 
 local BADGE_TEXT = "Forever"
+-- Retail shows no [Forever] badge (UI.SHOW_BADGE in UI/Main.lua).
+GrindingUI.SHOW_BADGE = false
 local INDENT = "     "
 
 --- The view the list is in: "mobs", "leather", "nodes" or "fish".
@@ -709,9 +713,11 @@ function GrindingUI.SkillText(need, have)
     return tostring(need), false
 end
 
---- The Skinning a mob needs: the data's, else Classic's rule from its level.
+--- The Skinning a mob needs: the data's, or nil. Retail never uses
+--- Classic's rule from the level (Grinding.SkinSkill): a level 80 mob read
+--- "400, you have 25".
 function GrindingUI.SkinNeed(mob)
-    return mob.skinSkill or ns.Grinding.SkinSkill(mob.minLevel)
+    return mob.skinSkill
 end
 
 --- What a kill is worth, as the Rankings tab shows it: your own kills
@@ -837,7 +843,8 @@ function GrindingUI.FooterText(layout)
     elseif layout == "nodes" then
         hint = L["Click a node to point the arrow at the spots you marked for it. Levels are the zone's levels."]
     elseif layout == "leather" then
-        hint = L["Click a camp to point the arrow there. The Skinning a mob needs comes from its level."]
+        -- Retail: no Skinning by level, so the Cloth view's words.
+        hint = L["Click a camp to point the arrow there. Camps show on your world map too. Target or hover a mob to learn its type."]
     else
         return L["Click a camp to point the arrow there. Camps show on your world map too. Target or hover a mob to learn its type."]
     end
@@ -972,7 +979,7 @@ function GrindingUI:UpdateRow(row, data)
     row.count:SetTextColor(Theme.Unpack(short and "dim" or "text"))
     row.worth:SetTextColor(Theme.Unpack(short and "dim" or (texts.worth:sub(1, 1) == "~" and "muted" or "good")))
 
-    if mob.forever then
+    if GrindingUI.SHOW_BADGE and mob.forever then
         row.badge:SetText(BADGE_TEXT)
         row.badge:Show()
     end

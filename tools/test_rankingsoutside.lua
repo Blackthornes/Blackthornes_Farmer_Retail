@@ -123,4 +123,28 @@ board = Rankings:Build()
 suite.check("off again, the dungeon's mob is back", Has(board.measured, "Defias Miner"))
 suite.check("nothing recorded was lost", Tracker:Store()["Defias Miner"].kills == 20)
 
+-- Retail: a dungeon the lists never heard of is learned from the game when
+-- you kill there (instanceZones), and only a dungeon or raid counts.
+local realInInstance = _G.IsInInstance
+local instance = { false }
+_G.IsInInstance = function() return instance[1], instance[2] end
+for _ = 1, 20 do Loot("Stone Golem", "The Stonevault", nil) end
+suite.check("outside, nothing is learned", not Spots.IsInstance("The Stonevault"))
+instance = { true, "scenario" }
+Loot("Stone Golem", "The Stonevault", nil)
+suite.check("a scenario is not a dungeon", not Spots.IsInstance("The Stonevault"))
+instance = { true, "party" }
+Loot("Stone Golem", "The Stonevault", nil)
+suite.check("a Retail dungeon is learned", Spots.IsInstance("The Stonevault"))
+suite.check("and saved", ns.db.instanceZones and ns.db.instanceZones["The Stonevault"] == true)
+suite.check("world drops leave it out", ns.WorldDrops.Inside("The Stonevault"))
+Loot("Bandit", "Orgrimmar", nil)
+suite.check("a capital is never learned", not Spots.IsInstance("Orgrimmar")
+    and ns.db.instanceZones["Orgrimmar"] == nil)
+ns.HandleSlash("rankings outside on")
+suite.check("ticked, its mob leaves the board", not Has(Rankings:Build().measured, "Stone Golem"))
+ns.HandleSlash("rankings outside off")
+suite.check("unticked, it is back", Has(Rankings:Build().measured, "Stone Golem"))
+_G.IsInInstance = realInInstance
+
 suite.done()

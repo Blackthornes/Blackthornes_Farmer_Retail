@@ -267,3 +267,74 @@ fixed there from here.
 
 **Sync rule: Keep Retail** for the `Raise` line in `LootTableUI:Show`
 unless Forever has fixed it the same way, then take Forever's.
+
+## 13. No Forever or sister-addon words on Retail
+
+Retail players never read about Forever, Classic or the sister addons,
+which have no Retail version yet (the owner approved the words,
+2026-10-27).
+
+- `Core/SisterNote.lua`: `Note.ON_RETAIL` and `Note:Listed()`; `ToName`
+  reads `Listed`, so the login chat line names no sister without a Retail
+  version. Add a folder to `ON_RETAIL` when one ships for Retail.
+  `tools/test_sisternote.lua` sets it to nil for Forever's checks and adds
+  a Retail check.
+- `UI/About.lua`: the BLACKTHORNES ADDONS list reads `Sisters:Listed()`
+  and shows only with more than Farmer in it; the third `THANKS` paragraph
+  is Retail's ("Farmer is new on Retail...").
+- `UI/Settings.lua`: no "Craft or Sell:" row (it needs Tradeskills;
+  `/farm tooltip craft` still answers); the TSM and Auctionator hover no
+  longer names Tradeskills.
+- `UI/Main.lua` search footer is "Click a row to put it in chat.";
+  `UI/LootTable.lua` and `UI/Rankings.lua` name TSM or Auctionator when no
+  price addon is loaded; `Logic/Value.lua` `/farm value` help says
+  "at auction prices"; `Data/Database.lua` `PROVENANCE.forever` is "from
+  your own play"; `Logic/Search.lua` `/farm data` drops the "Classic spots"
+  line. The same keys in every `Locale/*.lua`.
+
+- `UI/Main.lua` `UI.SHOW_BADGE` and `UI/Grinding.lua`
+  `GrindingUI.SHOW_BADGE` are false: no green [Forever] badge on search or
+  Grind rows (every Retail row is your own play). `tools/test_textfit.lua`
+  checks Forever's badge slot with it turned on.
+
+`SisterNote.lua` and `About.lua` are otherwise the shared files.
+
+**Sync rule: Blend.** Take Forever's changes to these files and keep these
+lines. A new Forever string that names Forever, Classic or a sister addon
+gets Retail words, shown to the owner first.
+
+## 14. No Skinning by level
+
+Retail lets any mob in an expansion's zones be skinned with that
+expansion's Skinning, so Classic's rule (`Grinding.SkinSkill`, five points
+a level) read "400, you have 25" on a level 80 mob and turned skinnable
+corpses grey (the owner said fix it, 2026-10-27).
+
+- `UI/Grinding.lua`: the `leather` layout has no `skill` column;
+  `GrindingUI.SkinNeed` gives only the data's `skinSkill`; the Leather
+  footer uses the Cloth view's words (the "comes from its level" key is
+  gone from every `Locale/*.lua`).
+- `UI/NodeSparkle.lua` `ColorFor`: a corpse is always `GOLD`.
+- Tests: `tools/test_grindgather.lua`, `tools/test_nodesparkle.lua`.
+  `Grinding.SkinSkill` itself stays (Gather to cap, Forever only, reads it).
+
+**Sync rule: Keep Retail** for these lines; Blend any other Forever change
+to the Leather view or the sparkles.
+
+## 15. Dungeons learned as you kill
+
+The lists in `Logic/Spots.lua` and `Data/Zones.lua` know only Classic's
+dungeons, so Retail's counted as open world for "Outside dungeons only"
+and World drops (the owner said fix it, 2026-10-27).
+
+- `Logic/Spots.lua`: `Spots.INSTANCE_TYPES` (party, raid),
+  `Spots.LearnedInstance`, `Spots:NoteInstance` (keeps the zone in
+  `instanceZones[English name] = true`, account wide, never rename it;
+  moves `Rankings.outsideVersion`); `Spots.IsInstance` reads it.
+- `Logic/Tracker.lua` `Tracker:Record`: each new kill calls
+  `Spots:NoteInstance` in a pcall.
+- `Logic/WorldDrops.lua` `WorldDrops.Inside`: reads it too.
+- Test in `tools/test_rankingsoutside.lua`.
+
+**Sync rule: Keep Retail** for these lines; Blend Forever's changes around
+them.

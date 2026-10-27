@@ -465,6 +465,8 @@ function Tracker:Record(mobName, guid, items, quantities, copper, place, haul, s
 
         mob.kills = mob.kills + 1
         self.session[mobName] = (self.session[mobName] or 0) + 1
+        -- Retail: learn the dungeon or raid this kill was in.
+        if ns.Spots and ns.Spots.NoteInstance then pcall(ns.Spots.NoteInstance, ns.Spots) end
 
         -- Coin is taken on the first opening; a second window on the same
         -- corpse is skinning or leftovers, never more coin. A kill with none

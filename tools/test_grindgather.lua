@@ -87,7 +87,8 @@ for _, mob in pairs(Grinding:Mobs().all) do
     if mob.name == "Vale Stag" then stag = mob end
 end
 check("the data's skill wins", GrindingUI.SkinNeed(stag) == 40)
-check("else Classic's rule from the level", GrindingUI.SkinNeed(wolf) == 110)
+check("Retail has no rule from the level", GrindingUI.SkinNeed(wolf) == nil)
+check("and no SKILL column in the Leather view", not table.concat(GrindingUI.LAYOUTS.leather, " "):find("skill", 1, true))
 check("short of it says so", GrindingUI.SkillText(110, 94) == "110, you have 94")
 check("enough is just the number", GrindingUI.SkillText(40, 94) == "40")
 check("the wolf gives its leather", wolf.leathers["Test Leather"] == true)
@@ -253,7 +254,7 @@ for _, row in ipairs(GrindingUI.list.data) do
 end
 local texts = wolfRow and GrindingUI:MobTexts(wolfRow.mob)
 check("a beast's row: its leather", texts and texts.gives == "Test Leather", texts and texts.gives)
-check("its skill, short", texts and texts.skill == "110, you have 94" and texts.short)
+check("no skill by level on Retail", texts and texts.skill == "" and not texts.short)
 check("a skin's worth and how many", texts and texts.worth ~= "" and texts.count == "2")
 check("its headings", GrindingUI.headings.gives:GetText() == "LEATHER"
     and GrindingUI.headings.worth:GetText() == "PER SKIN")

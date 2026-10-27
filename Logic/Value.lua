@@ -730,7 +730,7 @@ function Value:ResolveMob(text)
     return found or prefix
 end
 
-ns.RegisterCommand("value", L["what a mob is worth per kill, from Tradeskills prices"], function(rest)
+ns.RegisterCommand("value", L["what a mob is worth per kill, at auction prices"], function(rest)
     local wanted = Util.Trim(rest or "")
     local mobName = Value:ResolveMob(wanted) or (wanted ~= "" and wanted) or nil
 

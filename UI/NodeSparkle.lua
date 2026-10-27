@@ -927,8 +927,9 @@ function NodeSparkle:ColorFor(kind, name, level)
             return self.SkillColor(read and skills[skill] or nil, need, read) or self.GOLD
         end
     elseif kind == "corpse" then
-        local need = ns.Grinding and ns.Grinding.SkinSkill(level)
-        return self.SkillColor(read and skills.Skinning or nil, need, read) or self.GOLD
+        -- Retail: a corpse you may skin is gold. Classic's rule by level
+        -- (Grinding.SkinSkill) turned every Retail corpse grey.
+        return self.GOLD
     end
     return self.GOLD
 end

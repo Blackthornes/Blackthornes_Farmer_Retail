@@ -117,6 +117,9 @@ local COLUMN_GAP = 6
 
 local DROP_BAR_WIDTH = 46
 local BADGE_TEXT = "Forever"
+-- Retail shows no [Forever] badge: every row there is your own play, so it
+-- said "Forever" on nearly every row (the owner, 2026-10-27).
+UI.SHOW_BADGE = false
 
 -- A row is this much narrower than the window: the window's padding, the
 -- list's inset in its panel, and the scrollbar beside the rows.
@@ -468,7 +471,7 @@ function UI:BuildBody()
     footer:SetHeight(26)
     footer:SetWordWrap(true)
     footer:SetJustifyV("MIDDLE")
-    footer:SetText(L["Unmarked spots are from Classic and not yet seen on Forever. Click a row to put it in chat."])
+    footer:SetText(L["Click a row to put it in chat."])
     self.footer = footer
 
     self:BuildEmpty()
@@ -633,7 +636,7 @@ function UI:FitColumns(rows)
             if worth then
                 widths.value = math.max(widths.value, Theme.TextWidth("small", worth) + 6)
             end
-            if row.source.provenance == "forever" then
+            if UI.SHOW_BADGE and row.source.provenance == "forever" then
                 widths.badge = math.max(widths.badge, Theme.TextWidth("tiny", BADGE_TEXT))
             end
             if UI.MapsMob(row.source) then widths.map = MAP_BUTTON_WIDTH end
@@ -1146,7 +1149,7 @@ function UI:UpdateRow(row, data, index)
         row.value:Show()
     end
 
-    if source.provenance == "forever" then
+    if UI.SHOW_BADGE and source.provenance == "forever" then
         row.badge:SetText(BADGE_TEXT)
         row.badge:Show()
     end
