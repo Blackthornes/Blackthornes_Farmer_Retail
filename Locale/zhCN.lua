@@ -648,6 +648,7 @@ L["goal arrow on, following %s. Click it for the next goal, right-click for the 
 L["goal arrow on. It shows once you set a goal: /farm goal Copper Ore 40."] = "目标箭头已打开。你设置目标后它就会出现：/farm goal 铜矿石 40。"
 L["goal arrow off. /farm arrow on shows it."] = "目标箭头已关闭。/farm arrow on 会显示它。"
 L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, route, <goal>)"] = "指向目标最近采集地点的箭头（on, off, next, check, tomtom, route, <目标>）"
+L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, <goal>)"] = "指向目标最近采集地点的箭头（on, off, next, check, tomtom, <目标>）"
 L["pointing at %s."] = "指向 %s。"
 L["no other place known for that goal."] = "这个目标没有其他已知地点。"
 L["TomTom is off, so the goal arrow uses its own dial."] =

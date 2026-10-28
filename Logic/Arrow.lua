@@ -1014,7 +1014,7 @@ ns.RegisterCommand("arrow", L["an arrow to the nearest place to gather a goal (o
             ns.Print(L["TomTom takes over once you install it."])
         end
         if ns.SettingsUI then pcall(ns.SettingsUI.Refresh, ns.SettingsUI) end
-    elseif word == "route" or word == "route on" or word == "route off" then
+    elseif (word == "route" or word == "route on" or word == "route off") and ns.Travel then
         local Travel = ns.Travel
         if word == "route" then Travel:SetOn(not Travel.IsOn()) else Travel:SetOn(word == "route on") end
         if Travel.IsOn() then
@@ -1037,6 +1037,14 @@ ns.RegisterCommand("arrow", L["an arrow to the nearest place to gather a goal (o
         end
     end
 end)
+
+-- Retail leaves Guide Me (Logic/Travel.lua) out, so its help names no
+-- route, and `/farm arrow route` is not taken for one.
+function Arrow:OnEnable()
+    if not ns.Travel and ns.commands.arrow then
+        ns.commands.arrow.usage = L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, <goal>)"]
+    end
+end
 
 --------------------------------------------------------------------------------
 -- What Logic/Travel.lua (the same file in every addon) asks of Farmer

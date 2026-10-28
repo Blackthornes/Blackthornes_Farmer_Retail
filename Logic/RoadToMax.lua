@@ -420,8 +420,14 @@ function RoadToMax:ReadWindow()
             end
             -- A line the window reads as 0 of 0 says nothing new: keep
             -- what the book said of it.
+            -- A change moves the version, so a road already drawn shows it.
             if mine and (skill > 0 or (most or 0) > 0 or type(mine.lines[id]) ~= "table") then
-                mine.lines[id] = { skill = skill, most = most and most > 0 and most or nil }
+                local cap = most and most > 0 and most or nil
+                local kept = mine.lines[id]
+                if type(kept) ~= "table" or kept.skill ~= skill or kept.most ~= cap then
+                    mine.lines[id] = { skill = skill, most = cap }
+                    RoadToMax.version = (RoadToMax.version or 0) + 1
+                end
             end
         end
     end

@@ -293,7 +293,8 @@ function GrindGather:Zones(view, low, high)
         and type(ns.db.gathering.spots) == "table" and ns.db.gathering.spots or {}
     local asked = {}
     for _, spot in ipairs(spots) do
-        local zoneName = type(spot) == "table" and ns.Spots.MAP_ZONES[spot.map]
+        -- Retail: by the client's map name too (Spots.MapZone).
+        local zoneName = type(spot) == "table" and ns.Spots.MapZone(spot.map)
         local zone = zoneName and byZone[zoneName]
         local node = zone and type(spot.node) == "string" and zone.byNode[spot.node]
         if node and (spot.kind == nil or spot.kind == spec.gathering) then
