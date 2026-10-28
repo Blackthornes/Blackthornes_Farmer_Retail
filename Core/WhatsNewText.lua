@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.47.2", lines = {
+        "This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.",
+    } },
     { version = "0.47.1", lines = {
         "This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.",
     } },
@@ -15,14 +18,5 @@ ns.WHATS_NEW = {
         "Fishing spots are marked on your map too.",
         "Nodes that are close together join into one pin. On the world map, pins that sit on top of each other join into one pin with a count.",
         "The gold arrow moves on to the next spot when you reach a node that isn't up yet.",
-    } },
-    { version = "0.46.0", lines = {
-        "This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.",
-        "Farmer counts every kill and drop you loot, so a mob's worth comes from your own play. Looting a whole pack at once counts every corpse.",
-        "Rankings lists mobs by what a kill is worth. If you use TradeSkillMaster or Auctionator, drops are priced from their auction prices.",
-        "Search any item, zone or mob to see where you found it. Set a goal and a gold arrow leads you there.",
-        "The Stats tab turns your farming into charts: gold an hour, where your gold came from and your best mobs.",
-        "The Open button opens clams, sacks and lockboxes, and Farmer counts what comes out.",
-        "Herbs, ore and fishing spots are marked on your map and minimap.",
     } },
 }
