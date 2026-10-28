@@ -359,3 +359,25 @@ them.
 **Sync rule: Keep Retail** for these lines; Blend Forever's changes around
 them. If Forever brings its own map-name fallback to `GrindGather:Zones`,
 take Forever's.
+
+## 17. Reagents with quality ranks
+
+Since Dragonflight a gathered reagent comes in quality ranks that share one
+name but each have their own item ID and price. Farmer keeps items by name,
+so it priced every rank at the first one it saw, and a goal counted only
+that rank in the bags (Trent said fix it, 2026-10-28).
+
+- `Logic/Tracker.lua`: `Tracker:NoteLook` reads the loot link every time and
+  calls `Tracker:NoteRank`, which keeps each rank's ID with its loot count
+  in `tracker.looks[name].ranks[id]` (account wide, never rename it), only
+  for an ID `Tracker.RankOf` (`C_TradeSkillUI.GetItemReagentQualityByItemInfo`)
+  gives a rank; `Tracker.unranked` asks once per other ID; `Tracker:RanksOf`.
+- `Logic/Value.lua`: `Value:UnitPrice(itemID, exact)` prices a ranked ID by
+  its ranks together, weighted by loot (`RankGroup`, `RankedPrice`); the old
+  body is `Value:OnePrice`. `UI/Trash.lua` passes `exact` for a bag stack.
+- `Logic/Goals.lua` `Goals:Have` counts every rank.
+- Test `tools/test_reagentranks.lua`.
+
+**Sync rule: Keep Retail** for these lines; Blend Forever's changes around
+them. A Forever caller of `Value:UnitPrice` that prices one bag stack
+passes `exact`.

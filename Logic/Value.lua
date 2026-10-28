@@ -323,7 +323,60 @@ end
 --- One unit's worth and where the number came from ("auction" or "vendor").
 -- A grey item is only ever worth what a vendor pays (2026-09-25): the
 -- auction house is no price for vendor trash, whatever a scan once saw.
-function Value:UnitPrice(itemID)
+-- A reagent with quality ranks (Tracker:NoteRank) is priced by its ranks
+-- together, each weighted by how many you looted, since the lists keep it
+-- by name: one rank's price stood for all of them. `exact` prices only that
+-- ID (a stack in the bags).
+function Value:UnitPrice(itemID, exact)
+    if not itemID then return nil end
+    if not exact then
+        local ranks = self:RankGroup(itemID)
+        if ranks then return self:RankedPrice(ranks) end
+    end
+    return self:OnePrice(itemID)
+end
+
+--- The ranks `itemID` is one of, { [id] = loot count }, or nil. Laid out
+--- once per change to the looks.
+function Value:RankGroup(itemID)
+    local Tracker = ns.Tracker
+    if not (Tracker and Tracker.Looks and Tracker.RanksOf) then return nil end
+    local version = Tracker.looksVersion or 0
+    local kept = self.rankGroups
+    if not kept or kept.version ~= version then
+        kept = { version = version, byID = {} }
+        for name, look in pairs(Tracker:Looks()) do
+            if type(look) == "table" and type(look.ranks) == "table" then
+                local ranks = Tracker:RanksOf(name)
+                if ranks then
+                    for id in pairs(ranks) do kept.byID[id] = ranks end
+                end
+            end
+        end
+        self.rankGroups = kept
+    end
+    return kept.byID[tonumber(itemID) or 0]
+end
+
+--- What one of a ranked reagent is worth: each rank's price weighted by
+--- how many of it you looted (a rank never counted weighs one).
+function Value:RankedPrice(ranks)
+    local total, weight, from = 0, 0, nil
+    for id, seen in pairs(ranks) do
+        local unit, source = self:OnePrice(id)
+        if unit then
+            local each = math.max(1, tonumber(seen) or 0)
+            total = total + unit * each
+            weight = weight + each
+            if source == "auction" or not from then from = source end
+        end
+    end
+    if weight == 0 then return nil end
+    return math.floor(total / weight + 0.5), from
+end
+
+--- One item ID's own worth, as UnitPrice gives it.
+function Value:OnePrice(itemID)
     if not itemID then return nil end
 
     local vendor = self:VendorPrice(itemID)
