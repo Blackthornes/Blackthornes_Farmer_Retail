@@ -74,4 +74,14 @@ local typed, whyTyped = pcall(function()
 end)
 suite.check("share drops and the arrow check still answer", typed, whyTyped)
 
+-- Guide Me is left out: `/farm arrow route` is no error, and the help names
+-- no route.
+local routed, whyRoute = pcall(function()
+    ns.HandleSlash("arrow route")
+    ns.HandleSlash("arrow route on")
+end)
+suite.check("/farm arrow route answers without Guide Me", routed, whyRoute)
+suite.check("the arrow's help names no route", not ns.commands.arrow.usage:find("route"),
+    ns.commands.arrow.usage)
+
 suite.done()

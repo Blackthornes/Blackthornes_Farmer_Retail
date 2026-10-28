@@ -649,6 +649,7 @@ L["goal arrow on, following %s. Click it for the next goal, right-click for the 
 L["goal arrow on. It shows once you set a goal: /farm goal Copper Ore 40."] = "Zielpfeil an. Er erscheint, sobald du ein Ziel setzt: /farm goal Kupfererz 40."
 L["goal arrow off. /farm arrow on shows it."] = "Zielpfeil aus. /farm arrow on zeigt ihn an."
 L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, route, <goal>)"] = "ein Pfeil zum nächsten Ort, an dem du für ein Ziel sammelst (on, off, next, check, tomtom, <Ziel>)"
+L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, <goal>)"] = "ein Pfeil zum nächsten Ort, an dem du für ein Ziel sammelst (on, off, next, check, tomtom, <Ziel>)"
 L["pointing at %s."] = "zeigt auf %s."
 L["no other place known for that goal."] = "kein anderer Ort für dieses Ziel bekannt."
 L["TomTom is off, so the goal arrow uses its own dial."] =

@@ -331,6 +331,26 @@ function Spots.ZoneFromMap()
     return nil
 end
 
+--- The English name of the zone map `mapID` shows (Retail): Spots.MAP_ZONES
+--- when it has the map, else the client's own name for it. MAP_ZONES holds
+--- Classic's map numbers, so on Retail it named no spot's zone and the Grind
+--- tab's Ore and Herbs views showed none of your spots. Kept per map.
+Spots.mapNames = {}
+function Spots.MapZone(mapID)
+    mapID = tonumber(mapID)
+    if not mapID then return nil end
+    if Spots.MAP_ZONES[mapID] then return Spots.MAP_ZONES[mapID] end
+    local kept = Spots.mapNames[mapID]
+    if kept ~= nil then return kept or nil end
+    local info = type(C_Map) == "table" and Read(C_Map.GetMapInfo, mapID)
+    local ok, raw = pcall(function() return type(info) == "table" and info.name or nil end)
+    local name = ok and ns.Harvest.Readable(raw) or nil
+    if name == "" then name = nil end
+    name = name and (Spots.English(name) or name) or nil
+    Spots.mapNames[mapID] = name or false
+    return name
+end
+
 --- Where you are and your level, either nil when the client will not say.
 --
 -- The zone is the English name the data uses. A client in another language

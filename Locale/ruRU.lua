@@ -651,6 +651,7 @@ L["goal arrow on, following %s. Click it for the next goal, right-click for the 
 L["goal arrow on. It shows once you set a goal: /farm goal Copper Ore 40."] = "стрелка цели включена. Она появится, когда ты поставишь цель: /farm goal Медная руда 40."
 L["goal arrow off. /farm arrow on shows it."] = "стрелка цели выключена. /farm arrow on покажет её."
 L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, route, <goal>)"] = "стрелка к ближайшему месту, где собирать для цели (on, off, next, check, tomtom, <цель>)"
+L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, <goal>)"] = "стрелка к ближайшему месту, где собирать для цели (on, off, next, check, tomtom, <цель>)"
 L["pointing at %s."] = "указывает на %s."
 L["no other place known for that goal."] = "других мест для этой цели не известно."
 L["TomTom is off, so the goal arrow uses its own dial."] =

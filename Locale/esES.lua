@@ -650,6 +650,7 @@ L["goal arrow on, following %s. Click it for the next goal, right-click for the 
 L["goal arrow on. It shows once you set a goal: /farm goal Copper Ore 40."] = "flecha de objetivo activada. Aparece en cuanto pongas un objetivo: /farm goal mineral de cobre 40."
 L["goal arrow off. /farm arrow on shows it."] = "flecha de objetivo desactivada. /farm arrow on la muestra."
 L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, route, <goal>)"] = "una flecha al lugar más cercano para recoger un objetivo (on, off, next, check, tomtom, <objetivo>)"
+L["an arrow to the nearest place to gather a goal (on, off, next, check, tomtom, <goal>)"] = "una flecha al lugar más cercano para recoger un objetivo (on, off, next, check, tomtom, <objetivo>)"
 L["pointing at %s."] = "apuntando a %s."
 L["no other place known for that goal."] = "no se conoce otro lugar para ese objetivo."
 L["TomTom is off, so the goal arrow uses its own dial."] =

@@ -338,3 +338,24 @@ and World drops (the owner said fix it, 2026-10-27).
 
 **Sync rule: Keep Retail** for these lines; Blend Forever's changes around
 them.
+
+## 16. Bug pass of 2026-10-28
+
+- `Logic/Spots.lua`: `Spots.MapZone(mapID)` and `Spots.mapNames`: a map's
+  zone by `Spots.MAP_ZONES`, else the client's own map name (kept per map).
+  `MAP_ZONES` holds Classic's map numbers, so on Retail
+  `GrindGather:Zones` named no spot's zone, and the Grind tab's Ore and
+  Herbs views showed no spots, no grow-back time and pointed the arrow at
+  the zone only. `Logic/GrindGather.lua` `Zones` reads `Spots.MapZone`.
+  Test in `tools/test_grindgather.lua`.
+- `Logic/Arrow.lua`: the `arrow` command's `route` words only `and
+  ns.Travel` (it raised a Lua error without Guide Me), and `Arrow:OnEnable`
+  gives the command a help line without "route" when Travel is not loaded
+  (a new key in every `Locale/*.lua`). Test in `tools/test_retail.lua`.
+- `Logic/RoadToMax.lua` `ReadWindow` moves `RoadToMax.version` when a line
+  changes, so a road already drawn shows a skill a profession window read.
+  Test in `tools/test_roadtomax.lua`.
+
+**Sync rule: Keep Retail** for these lines; Blend Forever's changes around
+them. If Forever brings its own map-name fallback to `GrindGather:Zones`,
+take Forever's.

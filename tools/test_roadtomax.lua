@@ -150,6 +150,22 @@ local midnight = Road:Path("ore", "midnight")
 check("and read", midnight.line and midnight.line.skill == 12 and midnight.line.most == 100)
 check("its zones", midnight.stops[1].zone == "Eversong Woods")
 
+-- A profession window that reads a new skill moves a road already drawn.
+do
+    local saved = lines[2570]
+    lines[2570] = { 41, 75, 186 }
+    Road:ReadWindow()
+    local before = Road:Path("ore", "northrend")
+    lines[2570] = { 60, 75, 186 }
+    Road:ReadWindow()
+    lines[2570] = { 0, 0, 186 }
+    local after = Road:Path("ore", "northrend")
+    check("a window's new skill shows on the road", before.line and before.line.skill == 41
+        and after.line and after.line.skill == 60, after.line and after.line.skill)
+    lines[2570] = saved
+    Road:ReadWindow()
+end
+
 -- Kept when the client will not say.
 _G.C_TradeSkillUI.GetProfessionInfoBySkillLineID = function() return nil end
 ns.GrindGather.paceVersion = ns.GrindGather.paceVersion + 1

@@ -167,6 +167,19 @@ check("what it gives", table.concat(vein.givesList, ",") == "Test Ore,Test Stone
 check("your gathers", vein.gathers == 4)
 check("your spots", vein.spots == 2 and #vein.spotList == 2)
 check("how soon it grows back", vein.respawn == 360, vein.respawn)
+
+-- Retail: a map Spots.MAP_ZONES does not know (it holds Classic's numbers)
+-- is named by the client.
+do
+    local mapInfo = _G.C_Map.GetMapInfo
+    _G.C_Map.GetMapInfo = function(id) if id == 99937 then return { mapID = id, name = ZONE } end end
+    table.insert(ns.db.gathering.spots, { map = 99937, x = 0.2, y = 0.3, node = "Test Vein", kind = "ore", gathers = 1 })
+    local retail = NodeNamed(ZoneNamed(GrindGather:Zones("ore", 20, 30), ZONE), "Test Vein")
+    check("a spot on a map named by the client", retail and retail.spots == 3, retail and retail.spots)
+    table.remove(ns.db.gathering.spots)
+    ns.Spots.mapNames[99937] = nil
+    _G.C_Map.GetMapInfo = mapInfo
+end
 check("a gather's worth", vein.perGather == 20, vein.perGather)
 check("no hour yet under ten minutes", vein.perHour == nil)
 pace.seconds = 720
