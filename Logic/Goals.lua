@@ -263,7 +263,18 @@ function Goals:Have(name, itemID)
     end
     if not fn then return nil end
 
+    -- A reagent with quality ranks counts every rank you have
+    -- (Tracker:NoteRank): they share the goal's name.
+    local ranks = ns.Tracker and ns.Tracker.RanksOf and ns.Tracker:RanksOf(name)
     local ok, count = pcall(function()
+        if ranks then
+            local total = 0
+            if id and not ranks[id] then total = ns.Harvest.ReadableNumber(fn(id, bank)) or 0 end
+            for each in pairs(ranks) do
+                total = total + (ns.Harvest.ReadableNumber(fn(each, bank)) or 0)
+            end
+            return total
+        end
         local value = fn(id or name, bank)
         return ns.Harvest.ReadableNumber(value)
     end)

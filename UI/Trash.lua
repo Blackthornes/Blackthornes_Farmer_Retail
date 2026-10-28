@@ -199,7 +199,8 @@ function Trash:Worth(bag, slot, info)
     local name = Name(link)
     if name and ns.Goals and ns.Goals:Find(name) then return nil end
 
-    local unit = Number(ns.Value and ns.Value:UnitPrice(itemID))
+    -- This stack's own rank, not its ranks together.
+    local unit = Number(ns.Value and ns.Value:UnitPrice(itemID, true))
     if not unit or unit <= 0 then return nil end
     return unit * count, unit, itemID, link, count
 end

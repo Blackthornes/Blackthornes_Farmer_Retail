@@ -1068,9 +1068,16 @@ function Tracker:NoteLook(slot, name, icon)
 
     look.icon = look.icon or ReadableIcon(icon)
 
-    if (not look.color or not look.id) and GetLootSlotLink then
+    -- Read every time: a reagent's other quality ranks come by other IDs
+    -- under the same name (Tracker:NoteRank).
+    local text
+    if GetLootSlotLink then
         local ok, link = pcall(GetLootSlotLink, slot)
-        local text = ok and ns.Harvest.Readable(link) or nil
+        text = ok and ns.Harvest.Readable(link) or nil
+    end
+    self:NoteRank(look, text and tonumber(text:match("item:(%d+)")))
+
+    if not look.color or not look.id then
         local color, id = look.color, look.id
 
         look.color = look.color or Tracker.LinkColor(text)
@@ -1087,6 +1094,62 @@ function Tracker:NoteLook(slot, name, icon)
             self.looksVersion = (self.looksVersion or 0) + 1
         end
     end
+end
+
+-- Retail: since Dragonflight a gathered reagent comes in quality ranks
+-- that share one name but each have their own item ID and price. Farmer
+-- keeps items by name, so a look keeps each rank's ID it has seen, with
+-- how many times it was looted, in `look.ranks[id] = count` (account wide,
+-- never rename it): goals count every rank in the bags (Goals:Have) and a
+-- price is the ranks' own, weighted by what you looted (Value:UnitPrice).
+-- Only an ID the client gives a reagent rank for is kept.
+
+-- IDs the client gave no rank, so each loot asks only once. In memory only.
+Tracker.unranked = {}
+
+--- The quality rank the client gives a reagent's ID, or nil.
+function Tracker.RankOf(id)
+    if not id or Tracker.unranked[id] then return nil end
+    local trade = type(C_TradeSkillUI) == "table" and C_TradeSkillUI or nil
+    local read = trade and trade.GetItemReagentQualityByItemInfo
+    if type(read) ~= "function" then return nil end
+    local ok, rank = pcall(read, id)
+    rank = ok and ns.Harvest.ReadableNumber(rank) or nil
+    if rank and rank > 0 then return rank end
+    -- A plain answer of none is kept; an error may be the client not ready.
+    if ok then Tracker.unranked[id] = true end
+    return nil
+end
+
+--- One loot of `look`'s item by `id`: counted when it is a ranked reagent.
+function Tracker:NoteRank(look, id)
+    if not id then return end
+    local ranks = type(look.ranks) == "table" and look.ranks or nil
+    local known = ranks and ranks[id] ~= nil
+    if not known and not Tracker.RankOf(id) then return end
+    if not ranks then
+        ranks = {}
+        look.ranks = ranks
+    end
+    ranks[id] = (tonumber(ranks[id]) or 0) + 1
+    -- A new rank: the readers that index the looks lay them out again.
+    if not known then self.looksVersion = (self.looksVersion or 0) + 1 end
+end
+
+--- Every rank's ID seen for `name`, with its loot count: { [id] = count },
+--- or nil while fewer than two are known.
+function Tracker:RanksOf(name)
+    local ranks = self:LookOf(name).ranks
+    if type(ranks) ~= "table" then return nil end
+    local found, count = {}, 0
+    for id, seen in pairs(ranks) do
+        id = tonumber(id)
+        if id then
+            found[id] = tonumber(seen) or 0
+            count = count + 1
+        end
+    end
+    return count >= 2 and found or nil
 end
 
 -- An item's own name -> one of its random suffixes seen, whose look (icon,
