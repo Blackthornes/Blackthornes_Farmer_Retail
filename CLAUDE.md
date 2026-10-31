@@ -112,6 +112,12 @@ ever touch the Forever addon. So:
   checks it too; reaching a right-click pick lets the pick go. Grind tab
   and Road to max spots are nodes (`NodeCamp`'s `kind = "node"`). Tested
   in `tools/test_arrow.lua`. Not yet seen in game.
+- Beacons on nodes (a player's report, Trent said build it 2026-10-31):
+  Retail ships no herb or ore list, so `NodeSparkle:TooltipGathers` calls
+  a game object a node when its tooltip names Herbalism or Mining in the
+  client's words (`NodeSparkle:SkillWords`, the Professions book too);
+  such nodes sparkle gold. Tested in `tools/test_retailsparkle.lua`. Not
+  yet seen in game.
 - The rest of this file describes the Forever addon; read it as the
   starting point, not as what Retail has.
 

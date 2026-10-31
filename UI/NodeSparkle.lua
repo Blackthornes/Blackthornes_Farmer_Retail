@@ -529,10 +529,11 @@ end
 
 --- What kind of thing worth a sparkle the object is: "node", "school",
 --- "chest", "bobber" or "quest", or nil. A hidden source is nothing.
-function NodeSparkle:Kind(name)
+function NodeSparkle:Kind(name, guid)
     if type(name) ~= "string" or name == "" then return nil end
     if ns.DB and ns.DB:IsHiddenSource(name) then return nil end
     if self:IsNode(name) then return "node" end
+    if guid and self:TooltipGathers(guid) then return "node" end
     if ns.Fishing and ns.Fishing.IsSchool and ns.Fishing.IsSchool(name) then return "school" end
     if self.IsChest(name) then return "chest" end
     if self:IsBobber(name) then return "bobber" end
@@ -556,6 +557,89 @@ function NodeSparkle:IsNode(name)
     if not self:Names()[name:lower()] then return false end
     if ns.DB and ns.DB:IsHiddenSource(name) then return false end
     return true
+end
+
+--------------------------------------------------------------------------------
+-- Retail: a node told by the game's own tooltip
+--
+-- Retail ships none of Classic's herb and ore lists, so the names above are
+-- only the nodes the player has gathered, and a new player saw no beacon at
+-- all (a player's report, 2026-10-31). The game's tooltip for a herb or vein
+-- names the skill under its name ("Herbalism", "Requires Mining", "Khaz Algar
+-- Herbalism"), so a game object whose tooltip carries Herbalism or Mining in
+-- the client's own words is a node too. The words come from the client by ID
+-- (`Gathering.ClientNames`) and from the player's Professions book, where
+-- the skill line names it, so a German client reads "Kräuterkunde".
+--------------------------------------------------------------------------------
+
+NodeSparkle.GATHER_SKILLS = { "Herbalism", "Mining" }
+NodeSparkle.BOOK_LINES = { [182] = true, [186] = true }
+
+local skillWords, skillWordsKey = nil, nil
+
+--- The words a tooltip may name Herbalism or Mining by, in lower case.
+function NodeSparkle:SkillWords()
+    local book = {}
+    if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
+        local ok, first, second = pcall(GetProfessions)
+        if ok then
+            for _, index in ipairs({ ns.Harvest.ReadableNumber(first) or false, ns.Harvest.ReadableNumber(second) or false }) do
+                if index then
+                    local got, name, _, _, _, _, _, line = pcall(GetProfessionInfo, index)
+                    name = got and Readable(name) or nil
+                    if name and self.BOOK_LINES[ns.Harvest.ReadableNumber(line) or 0] then book[#book + 1] = name end
+                end
+            end
+        end
+    end
+    local key = table.concat(book, "|")
+    if skillWords and skillWordsKey == key then return skillWords end
+
+    local words = {}
+    local function Keep(word)
+        if type(word) == "string" and #word >= 4 then words[word:lower()] = true end
+    end
+    for _, english in ipairs(self.GATHER_SKILLS) do
+        Keep(english)
+        if ns.Gathering and ns.Gathering.ClientNames then
+            for word in pairs(ns.Gathering.ClientNames(english)) do Keep(word) end
+        end
+    end
+    for _, word in ipairs(book) do Keep(word) end
+    skillWords, skillWordsKey = words, key
+    return words
+end
+
+--- Does the game's tooltip for the game object `guid` name Herbalism or
+--- Mining? Asked again only when the object changes.
+function NodeSparkle:TooltipGathers(guid)
+    if type(guid) ~= "string" or not guid:find("^GameObject%-") then return false end
+    if self.tipGuid == guid and self.tipAt and GetTime and (GetTime() - self.tipAt) < 1 then
+        return self.tipAnswer
+    end
+    local answer = false
+    local get = Field(_G.C_TooltipInfo, "GetUnit")
+    if type(get) == "function" then
+        local ok, data = pcall(get, UNIT)
+        local lines = ok and Field(data, "lines")
+        if type(lines) == "table" then
+            local words = self:SkillWords()
+            -- The first line is the name.
+            for index = 2, #lines do
+                local text = Readable(Field(lines[index], "leftText"))
+                if type(text) == "string" and text ~= "" then
+                    local lower = text:lower()
+                    for word in pairs(words) do
+                        if lower:find(word, 1, true) then answer = true; break end
+                    end
+                end
+                if answer then break end
+            end
+        end
+    end
+    self.tipGuid, self.tipAnswer = guid, answer
+    self.tipAt = type(GetTime) == "function" and GetTime() or nil
+    return answer
 end
 
 --- What the interact key points at: its guid, its name, and whether it is a
@@ -1067,7 +1151,7 @@ function NodeSparkle:Refresh()
         return "shown"
     end
     if not guid then self:HideSparkle(); return "nothing" end
-    local kind = self:Kind(name)
+    local kind = self:Kind(name, guid)
     if not kind then self:HideSparkle(); return "notnode" end
     local plate = self:Plate(guid)
     if not plate then self:HideSparkle(); return "noplate" end
@@ -1195,7 +1279,8 @@ function NodeSparkle:Check()
     local kind = type(guid) == "string" and guid:match("^(%a+)%-") or nil
     ns.PrintRaw(("  facing: %s (%s)"):format(tostring(name), tostring(kind or (guid and "?" or "nothing"))))
     ns.PrintRaw(("  a node Farmer knows: %s"):format(name and (self:IsNode(name) and "yes" or "no") or "-"))
-    ns.PrintRaw(("  kind: %s"):format(name and tostring(self:Kind(name) or "none") or "-"))
+    ns.PrintRaw(("  tooltip names a gathering skill: %s"):format(guid and (self:TooltipGathers(guid) and "yes" or "no") or "-"))
+    ns.PrintRaw(("  kind: %s"):format(name and tostring(self:Kind(name, guid) or "none") or "-"))
     local skill, need = self:NodeNeeds(name)
     local color = self.shownColor or self.GOLD
     ns.PrintRaw(("  colors: %s, needs %s %s, corpses %s, skinnable corpse: %s, colour %.2f %.2f %.2f"):format(
