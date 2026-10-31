@@ -381,3 +381,22 @@ that rank in the bags (Trent said fix it, 2026-10-28).
 **Sync rule: Keep Retail** for these lines; Blend Forever's changes around
 them. A Forever caller of `Value:UnitPrice` that prices one bag stack
 passes `exact`.
+
+## 18. Beacons on nodes told by the tooltip
+
+Retail ships none of Classic's herb and ore lists, so the sparkles and
+beacons knew only nodes the player had gathered, and a new player saw none
+(a player's report; Trent said build it, 2026-10-31).
+
+- `UI/NodeSparkle.lua`: `NodeSparkle:TooltipGathers(guid)` calls a game
+  object a node when a line of its tooltip (`C_TooltipInfo.GetUnit`, after
+  the name) names Herbalism or Mining in the client's words
+  (`NodeSparkle:SkillWords`: the English names, `Gathering.ClientNames`,
+  and the Professions book's names for skill lines 182 and 186).
+  `Kind(name, guid)` asks it after `IsNode`; `Refresh` and the check pass
+  the guid, and the check prints what the tooltip gave. These nodes sparkle
+  gold, since Retail has no skill numbers for them.
+- Test `tools/test_retailsparkle.lua`.
+
+**Sync rule: Keep Retail** for these lines; Blend Forever's other changes
+to the sparkles.
