@@ -52,6 +52,7 @@ ignore:
   - UI/TravelMap.lua
   - Logic/GatherToCap.lua
   - UI/GatherToCap.lua
+  - UI/FishingBar.lua
 
 license-output: LICENSE
 
