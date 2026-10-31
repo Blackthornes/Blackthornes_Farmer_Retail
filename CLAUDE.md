@@ -36,14 +36,17 @@ ever touch the Forever addon. So:
   from Forever on purpose and whether a sync keeps Retail's lines or blends
   Forever's change in. Every Retail-only PR adds or updates its entry
   there. Last
-  caught up to Forever's `16167e1` (2026-10-24, the fold gem).
+  caught up to Forever's `e8bbd19` (2026-10-31, Forever 1.3.0: One Window,
+  the shared minimap button and the house kit).
 - The Retail TOC also leaves out these Forever features
   (`env.RETAIL_LEFT_OUT`, checked by `tools/test_retail.lua`): drop sending
   (`Logic/Contribute.lua`) and Legacy perks (`Logic/Legacy.lua`), both
   Forever only; Guide Me (`Data/Travel*.lua`, `Logic/Travel.lua`,
   `UI/TravelCard.lua`, `UI/TravelMap.lua`), whose routes are the Classic
   world's; and Gather to cap (`Logic/GatherToCap.lua`,
-  `UI/GatherToCap.lua`), built on Classic's 1 to 300 skill ladder. Their
+  `UI/GatherToCap.lua`), built on Classic's 1 to 300 skill ladder; and
+  the Fishing window (`UI/FishingBar.lua`, Cast and Add Lure), built for
+  Classic lures on a main-hand pole. Their
   Settings rows and commands show only where they are loaded. A Retail
   version of either is its own job, on the owner's yes.
 - Road to max (the owner approved the mockup and its words, 2026-10-24,
@@ -144,7 +147,12 @@ Farmer reads them itself (`Value:OtherPrice`: `TSM_API.GetCustomPriceValue
 ("DBMarket", "i:<id>")`, then `Auctionator.API.v1.GetAuctionPriceByItemID
 ("Blackthornes_Farmer", id)`, in a pcall, kept 60 s), "TSM and Auctionator"
 on the Loot page (`otherPriceAddons`, on unless unticked, never rename it;
-`tools/test_otherprices.lua`); with none of them, the vendor price. Tradeskills'
+`tools/test_otherprices.lua`); with none of them, the vendor price.
+"Price Order:" under it (the owner, 2026-10-26) picks TSM First (the
+default) or Auctionator First (`priceOrder`, "tsm" or "auctionator", nil
+reads as TSM; account wide, never rename it; `Value:PriceOrder`,
+`SetPriceOrder` forgets the kept answers). Tradeskills has the same choice
+for its own order. Tradeskills'
 `CLAUDE.md` asks its side to keep that global, `Prices` and `GetValue(itemID)`
 stable; if Farmer needs more from it, change both repos together.
 
@@ -429,15 +437,15 @@ sharing's conversation one way: the sender whispers a hello (`Q<id>:<hash>`)
 to each name in `Contribute.RECIPIENTS` (full names, kept only in code;
 never shown in chat or Settings; the game's "No player named" line is
 hidden, so a player can't tell whether a name exists on their realm) 30 s
-after login and every half hour. Only those characters answer, by full
+after login and every five minutes (the owner, 2026-10-26). Only those characters answer, by full
 name (`Contribute:Receiving`). Share's states carry `giveOnly` (the sender
 never asks for anything) and `takeOnly` (the receiver never says what it
 has), so nothing comes back to the player. Only the sender's own "h"
 records go, checked by `GuildShare.Plausible`, kept apart on the receiver
 in `sharedDrops` with ledgers by Farmer id in `sharedIn` (never rename
 either; at most `MAX_SENDERS`); they never join the receiver's own counts
-or show in the windows. One sender is synced at a time, each at most every
-half hour, and a chat line says "Got drops for N mobs from NAME."
+or show in the windows. One sender is synced at a time, the next as soon
+as one finishes, each at most every five minutes (`SYNC_GAP`), and a chat line says "Got drops for N mobs from NAME."
 Each finished share is kept on the receiving account in `sharedLog`
 (`{ at, name, mobs }`, the newest `LOG_KEEP`; never rename it) and read
 back with `/farm share drops log` (typed only, not in the help line). Only
@@ -447,12 +455,13 @@ data (in memory; the save is never changed, ledger names never read).
 Never announce the fold-in. Tested in `tools/test_contribute.lua` and
 `tools/test_harvest_import.py`. Not yet seen in game. A recipient whose
 first name trips `check_package.py`'s owner's-name check would stop the
-release; check before adding names. Two recipients since 2026-10-18, the
-owner's two characters on one account (one save between them), so the one
-online takes a share and the other skips it. Tradeskills has the same
-choice for disenchants and recipe levels (its `Logic/Contribute.lua`,
-"Sending data to Blackthornes" in its `CLAUDE.md`), with the same two
-names; change both lists together.
+release; check before adding names. Three recipients since 2026-10-27
+(the owner renamed his characters for Forever's release); a recipient on
+an account another one shares a save with takes a share while the other
+skips it. Tradeskills and Equipment have the same choice (their
+`Logic/Contribute.lua`, "Sending data to Blackthornes" and "Sending
+vendors and quests to Blackthornes" in their `CLAUDE.md`), with the same
+three names; change all three lists together.
 
 ## Giving data to another player
 
@@ -534,6 +543,46 @@ section "f"), so the pace never leaves the account.
 `FishZoneText`, `FishRows`. `/farm grind fish`. Tested in
 `tools/test_fishview.lua`. Not yet seen in game.
 
+## The Fishing window
+
+The owner said build it (2026-10-26, from a mockup): a small window with
+Cast and Add Lure while a fishing pole (item class 2, subclass 20) is in
+the main hand. `UI/FishingBar.lua`: Cast is a secure spell button for
+Fishing (7620, by the client's name) laid over a dark metal house button;
+Add Lure opens YOUR LURES, the lures in the bags best first
+(`FishingBar.LURES`), each row a secure macro `/use item:ID` then `/use
+16`. A lure whose tooltip asks for more Fishing than you have
+(`ITEM_MIN_SKILL`, kept in `FishingBar.needs`) is greyed and does nothing.
+Under them "Lure:" (`GetWeaponEnchantInfo`: "+75, 8:42 left", "None on"
+with Add Lure glowing, or "No lures in your bags"; the bonus by enchant ID
+in `LURE_ENCHANTS`, not yet seen in game) and "Fishing Skill:"
+(`GatherToCap.ReadSkill`). Attributes are set only out of combat; at
+`PLAYER_REGEN_DISABLED` it hides while it still may, and it hides at a
+vendor, bank, mailbox, auction house or trade. The close gem keeps it shut
+until the pole comes off. House frame, fold gem, size grip, drag. Off
+unless ticked: "Fishing Buttons:" under FISHING on the Loot page
+(`fishingBar`), place `fishingBarX`/`fishingBarY`, size `fishingBarScale`,
+all account wide, never rename them; `/farm fishbar [on|off]`. Luremaster
+(`Logic/Legacy.lua`) is untouched. Tested in `tools/test_fishingbar.lua`.
+Not yet seen in game.
+
+
+## The gold plaque
+
+Buttons that sit out on the screen on their own wear the gold plaque (the
+owner picked it from a mockup, 2026-10-27, as the Classic addons have it):
+a gold rim with a red gem at each end round dark glass, the item's icon in
+a small gold frame, a first line saying what the click does and a second
+under it, and a soft glow that breathes while it waits (Effects Full;
+still on Subtle, none on Off). `UI/Plaque.lua` is the same file in Pets,
+Equipment and Farmer (a fix to it belongs in all three):
+`Plaque.Create(parent, { name, template, width, height, minWidth })` and
+`:SetLines`, `:SetSecondColor`, `:SetIcon`, `:SetGlowing`, `:Flash`. Here
+it is the Fishing window's Cast ("Fishing 87 / 150" under it, the skill
+row is gone) and Add Lure ("Bright Baubles, 3 left"; it glows while no
+lure is on and one is in the bags, `FishingBar:Glow`). Each catch flashes
+Cast gold (`FishingBar:Caught`, from `Fishing:OnLoot`). Tested in
+`tools/test_fishingbar.lua`. Not yet seen in game.
 ## Legacy perks (read only)
 
 The owner said build it (2026-10-22): Forever's Legacy trees give
@@ -543,8 +592,10 @@ pcall, the ranks the character has set in two of them, Bountiful Harvest
 (herbs, ore, skins) and Luremaster (fish, with a lure on). It never
 spends a point and never suggests one (the owner: "we just read what
 they have set"). The config is found by a trait system the client calls
-Legacy (`GetConfigIDBySystemID`), else by the trees holding nodes
-`NODE_FIRST` to `NODE_LAST` (a few trees a frame, never in a fight); the
+Legacy (`GetConfigIDBySystemID`), else by the trees holding nodes in
+`NODE_RANGES` (110284 to 110319 and 113506 to 113513, trees 1187 to 1189
+in the Forever client's game tables, 2026-10-28; a few trees a frame,
+never in a fight); the
 perks are told apart by English name, so other clients record as before.
 No rank read means nothing changes. A gather, skin or cast made with one
 is still counted in its record, and also noted beside it in `boosted`
@@ -747,6 +798,82 @@ mobs (`Tracker:SessionMobs`) and the Loot tab (`TrackerUI:SessionItems`)
 leave hidden ones out; recorded data is never changed. Tested in
 `tools/test_hidelist.lua`.
 
+## The one window
+
+The owner approved the mockups and said build it (2026-10-30): one
+house-look window with a rail down its left side, a button for each
+Blackthornes addon loaded (Farmer, Tradeskills, Equipment, Pets, Butler),
+and the picked addon's own tabs beside it; one size, one size grip, one
+fold gem, one place. It was built first in the Classic Era copies and
+copied here by hand for Forever; nothing here reads or changes the Classic
+repos. `UI/SharedWindow.lua` is the same file in all five Forever addons
+(a fix to it belongs in all five), and so is `tools/test_sharedwindow.lua`;
+like the shared minimap button, every copy signs up in
+`_G.BlackthornesWindow`, each addon joins with `SharedWindow:Join` (beside
+its `SharedMinimap:Join`), and the copy with the highest `FILE_VERSION`
+builds the window. Forever counts its own `FILE_VERSION` from 1. An addon
+whose pages have moved in gives `host = { enter(area), leave() }`; until
+then its rail button opens its own window, so every addon works as before.
+On unless unticked ("One Window:" on the General page; nil reads as on,
+and a player who ticked or unticked it keeps that). Saved in every loaded
+addon's account save, account wide, never rename them: `oneWindow`,
+`oneWindowAt` (the newest wins), `oneWindowPick`, `oneWindowLeft`,
+`oneWindowTop`, `oneWindowScale`. Floating pieces (Kills & Loot, arrows,
+plaques, the loot feed, the XP bar, Feed buttons, the upgrade quest panel
+and the like) stay their own.
+
+Docking: while the game's auction house, mailbox, vendor or trainer window
+is open and the one window is up, it sits beside it
+(`SharedWindow.PLACES`, `Arrived`, `Dock`, by screen position only, never
+in a fight), its rail a row of emblems along the top. Moving it there
+saves nothing. When the game's window closes it goes back to its own place
+(`Undock`) and to the addon open before (`Left`, `hub.back`). Forever's
+client can close those windows through the interaction manager without
+the old close event, so `PLAYER_INTERACTION_MANAGER_FRAME_HIDE` undocks
+too (`SharedWindow.InteractionPlace`: `Enum.PlayerInteractionType`'s
+MailInfo, Merchant, Trainer and Auctioneer, else 17, 5, 7 and 21); a later
+close event for the same place changes nothing. At the auction house only
+Tradeskills is needed (`PLACES.auction.only`). Tested in
+`tools/test_sharedwindow.lua`. Not yet seen in game.
+
+Farmer's tabs have moved in (2026-10-30): the host is `FarmerTabs` in
+`UI/Main.lua` (`FarmerTabs.host`, given to `SharedWindow:Join`). With One
+Window on, opening Search, Rankings, Grind, Stats or Settings opens the one
+window on Farmer (`FarmerTabs:Route`, from `UI:Show` and
+`SettingsUI:Show`), each laid into its area bare of its own rim and grip,
+its tabs hung under the one window. A tab hiding only closes the one
+window when it is a Farmer tab in the area and no tab change or swap is
+under way (`FarmerTabs:Closed`, `switching`, `leaving`), so picking
+another addon on the rail never drops Farmer back to its own window.
+Kills & Loot, Goals and the other panels stay their own. "One Window:"
+sits on the General page. Tested in `tools/test_onewindow.lua`.
+
+## The shared minimap button
+
+A player asked, the owner said build it from a mockup (2026-10-28), in all
+five addons: one minimap button for every Blackthornes addon loaded, whose
+click opens a small menu (the house frame, "BLACKTHORNES" on the plate, a
+dark glass row for each addon with its icon and name; since 2026-10-29 no line under the name, and the menu is as wide as its longest name, measured). A
+row's left-click opens the addon, right-click its settings; Farmer's
+middle-click brings back its panels and Equipment's Shift-click toggles
+the upgrade quest. `UI/SharedMinimap.lua` is the same file in all five (a
+fix to it belongs in all five), and so is `tools/test_sharedminimap.lua`.
+There is no shared core addon: every copy signs up in
+`_G.BlackthornesMinimap`, each addon joins with its own button
+(`SharedMinimap:Join`), and the copy with the highest `FILE_VERSION` draws
+the shared button and menu. It is on by default (the owner, 2026-10-28):
+"Combine Addon Buttons:" in each addon's Settings, ticked unless unticked;
+unticked, every addon keeps its own button. Only our own buttons are hidden
+or shown, never the game's. Saved in every loaded addon's account save,
+account wide, never rename them: `minimapButton` ("shared" or "each", nil
+reads as shared), `minimapButtonAt` (the newest answer wins) and
+`minimapSharedAngle`. Never call it "One for All" (another addon's name).
+Every addon's own button also takes left-click to open and right-click for
+settings. Its face is the Blackthornes sign, a gold B in a ring of thorns on
+a dark round face (the owner picked it over the anvil, 2026-10-28):
+`Media/Frame/MinimapBadge.tga`, drawn by `tools/make_minimap_art.py` (the
+same tool in all five; rerun it, never edit the TGA). Not yet seen in game.
+
 ## The settings pages (from Tradeskills)
 
 The owner asked (2026-10-09) for Tradeskills' Settings upgrade in Pets,
@@ -768,9 +895,25 @@ list); checks and debug are typed only too (the owner, 2026-10-23). The owner's 
 (2026-10-15): labels in Title Case ending with ":" ("Text Size:"),
 one-word buttons ("Open", "Show", "On"), a hover only when it adds
 something (`pages:Row(..., nil)` shows none), never "Same as /farm ...",
-section headings ALL CAPS. The pages are UI, Kills, Loot, Map & goals,
-Sharing, Advanced and About. The minimap button always shows: no setting,
+section headings ALL CAPS. The pages are Kills, Loot, Map & goals,
+Sharing, General and About (2026-10-29: UI and Advanced became General;
+a saved `settingsPage` of "windows" or "advanced" opens General,
+`SettingsUI.OLD_PAGES`). The minimap button always shows: no setting,
 no `/farm minimap`, and a saved `minimapHidden` is kept but not read.
+Settings is the main window's last tab (the owner, 2026-10-27: "Last tab
+on bottom right will always be settings", in every addon): SEARCH,
+RANKINGS, GRIND, STATS, then SETTINGS flush right (`right = true` in
+`Widgets.CreateTabStrip`, kept flush by `strip:SetRoom` as the window
+grows). There is no header Settings button. Settings hangs the same tabs
+(`UI.Tabs()`), opens in the window's place and the window steps aside
+(`SettingsUI:Show`, `UI:Show`, `SettingsUI:OpenTab`), at the window's
+size (`SettingsUI:TakeWindowSize` after each `pages:Fit`; what Settings
+needs is `SettingsUI.need`, which `UI:WindowWidth`/`WindowHeight` grow
+to), its scale (`windowScale`) and its spot (`point`, `relativePoint`,
+`x`, `y`). `settingsScale`, `settingsPoint`, `settingsRelativePoint`,
+`settingsX` and `settingsY` stay in the save, unread; never rename them.
+The minimap's right-click still opens Settings. Tested in
+`tools/test_settingstab.lua`.
 Word choices are drop-downs, never < > pickers or word steppers (the
 owner, 2026-10-23): `Widgets.CreateChoice` takes a stepper's opts
 (min, max, step, value, format, onChange) on Pets' `Widgets.CreateDropdown`
@@ -894,7 +1037,19 @@ one belongs in all three.
 
 Farmer's arrow can also follow a camp from the Grind tab (a player asked,
 the owner agreed 2026-10-09; `Arrow:Grind`, `Logic/Grinding.lua`). That is
-Farmer's own feature, not part of the shared dial. The harvest file now ends
+Farmer's own feature, not part of the shared dial.
+
+The arrow moves on past empty spots (the owner said yes, 2026-10-26,
+from the cross-game check): a node spot you come within
+`Arrow.ARRIVED_NODE` (12 yards) of, gathered or not, counts as checked
+for `Arrow.CHECKED` (3 minutes) and sorts after the rest, as a spot just
+picked does (`Arrow:NoteArrivals`, looked at every `Arrow.SWEEP` seconds
+over the listed spots only; `WasChecked`; session only, nothing saved).
+Passing one on the way checks it too; reaching a right-click pick lets
+the pick go. Grind tab and Gather to cap spots are nodes
+(`GrindGather.NodeCamp`'s `kind = "node"`), so they arrive at 12 yards
+too. Farmer's own; the other dials are untouched. Tested in
+`tools/test_arrow.lua`. Not yet seen in game. The harvest file now ends
 with the creature types seen in game, as `if DB.CreatureTypes then ... end`
 so Equipment's and Pets' readers of `Data/Data_Harvested.lua`, whose `DB`
 has only `RegisterItem`, keep working.
@@ -904,6 +1059,14 @@ The dial takes no clicks and shows no hover text (the owner,
 closes it, and nothing else. Never add a click or tooltip to it again
 unasked; the same in every addon with an arrow.
 
+Arrow Size (the owner, 2026-10-26, in every addon with an arrow): "Arrow
+Size:" under "Guide Me:" picks 50%, 75% or 100% for the whole dial,
+plate and words (`ArrowUI.SIZES`, `Scale`, `Size`, `SetSize`; `arrowSize`,
+account wide, nil for 100, never rename it). The saved spot is kept in
+the screen's own units (stored times the scale), so a new size keeps the
+arrow where it was. No hover. Tested in `tools/test_arrowsize.lua`. A fix
+belongs in all five.
+
 Only one Blackthornes arrow is on screen at a time (the owner asked
 2026-10-08): Farmer's goal arrow, Equipment's quest arrow and Pets' beast
 arrow agree through one global table, `_G.BlackthornesArrows`
@@ -912,6 +1075,23 @@ arrow agree through one global table, `_G.BlackthornesArrows`
 the latest claim is drawn; the others wait hidden. The lines are the same
 in each dial's file (`ArrowUI:Claim`, `ArrowUI.Wins`); a change to them
 belongs in all three.
+
+## Our own map marker
+
+A German player found nothing at the Crossroads; the owner said do all
+six fixes (2026-10-29, in every addon): Forever turns the game's map pin
+down without a word, so a click on a Where to farm place in the zone you
+stand in (`Spots:Share`, `Spots:Mark(spot, name)`) lays our own gold
+marker on it (`UI/SpotMarker.lua`, the same file in Pets, Tradeskills,
+Butler and Farmer; Equipment's `MapPins:Spotlight` is the same look, a
+fix to one belongs in all): a gold ring with the name under it, two waves
+for `WAVE_FOR` seconds then a breathing glow (Effects Subtle a still
+glow, Off still). The game's pin is still tried and counts only when
+`C_Map.HasUserWaypoint` says it stuck; with it the marker goes with the
+pin, without it when you stand within `Arrow.ARRIVED_NODE` of the spot.
+"(pinned on your map)" is said only when one of them shows. Listed in
+`tools/testenv.lua`'s `UI_FILES`. Tested in `tools/test_spots.lua`. Not
+yet seen in game.
 
 ## The way there (arrows across zones and the sea)
 
@@ -932,8 +1112,11 @@ again on a new place, zone change, landing or flight learned, else every
 `REPLAN` seconds; held still on a flight (`UnitOnTaxi`) and in a fight.
 `Data/Travel.lua` (flight masters, flights, docks, rides) is written by
 `tools/make_travel.py <tables> <build>` from the Forever client's game
-tables (TaxiNodes, TaxiPath, GameObjects); never by hand, and each dock
-spot is a real row (`DOCKS`). The arrow's state carries `trip`
+tables (TaxiNodes, TaxiPath, TaxiPathNode, GameObjects); never by hand,
+and each dock spot is a real row (`DOCKS`). A flight's time is its real
+length along its TaxiPathNode points (`lengths`, one a pair in `paths`'
+order, 2026-10-28) over `FLIGHT_SPEED`; only a 0 falls back to the
+straight line times `FLIGHT_DETOUR`. The arrow's state carries `trip`
 (`Arrow:TripState`: "Step 2 of 3", the step's words); TomTom gets the next
 stop (`TomTomLink.Point`). `UI/TravelCard.lua` is "Your Way There"
 (`travelCardX`, `travelCardY`, `travelCardScale`), `UI/TravelMap.lua` the
@@ -994,6 +1177,10 @@ kept in the `DISCORD_WEBHOOK_URL` repository secret. The owner sets that secret
 himself; never ask him to paste the webhook address anywhere. Without it the
 step does nothing, and a failed post never undoes the upload. The tool is the
 same in all four repos; a fix to it belongs in all four.
+
+Release notes go only to #announcements (the owner, 2026-10-30): the
+release workflow no longer posts in #general. `tools/post_general.py` stays
+in the repo unused, and the #general paragraph below is history.
 
 The owner asked (2026-10-09) for one post in #general per release too,
 and (2026-10-10) for it to be short: a few bullets in plain words, a
@@ -1237,7 +1424,7 @@ own `Butler:Advise`), what Tradeskills' queue needs (its `Butler:Advise`
 keep, bank or mail, `Quests:Reason`), quest items and a lockbox whose
 tooltip says `LOCKED`; each sister read in a pcall, none required. In a
 fight it hides and goes back to UIParent, so the panel can still move;
-hidden at a vendor, bank, mailbox, auction house or trade. "Open after
+hidden at a vendor, bank, mailbox, auction house or trade. "Open Automatically" (once "Open after
 loot" (`autoOpen`, off unless ticked) opens the next one each
 `LOOT_CLOSED`, out of combat, with a free slot, until the game refuses
 the call (no Test button since the owner, 2026-10-23: the first opening
@@ -1522,6 +1709,33 @@ its level (`Grinding.SkinSkill`); its plate stays on
 page. Not yet seen in game.
 Tested in `tools/test_nodesparkle.lua`.
 
+## Gathered spots on the maps
+
+The world map marker where you gathered shows the item you got there (the
+owner said build it, 2026-10-24, from a mockup): `spot.item` is kept by
+`Gathering:AddSpot` from the loot (`Gathering.TopItem`), and a spot saved
+before then finds it by its node's name from your own records, else the
+data (`MapMarkers:SpotItem`, `IconFor`; the plain herb, ore or fish icon
+when nothing is known). The icon stays grey until `Respawn:BackAt` says the
+node should be back, then shows in full colour at full strength; a once a
+second look (`MapMarkers:WakeWorld`) recolours pins already placed and
+places nothing again. Fishing schools you moused over before casting are
+marked too (`kind = "fish"`, from `Fishing:OnLoot`), with the fish, "Fished"
+on the hover, never a grow-back time and never coloured in. The minimap
+keeps its hollow corners. Nothing new is saved beyond `item` on a spot.
+Tested in `tools/test_markers.lua`. Not yet seen in game.
+Round and joined (the owner said build it, 2026-10-26, from a mockup, as
+Retail's): an icon is cut round with a mask texture
+(`MapMarkers.RoundIcon`, also for the Grind pins; `SetMask` only where the
+client has no mask textures). World map pins of one kind closer than
+`JOIN_PIXELS` on screen at the zoom shown draw as one with a count
+(`MapMarkers.Group`, `GroupItems`, `GroupIcon`, `GroupNode`; drawing only,
+the save is unchanged; a herb and an ore never join), in color once any of
+its spots is back; its hover says how many spots and `Respawn:GroupLines`
+(how many are back, when the next is). A pin is `farmerMarker`, and
+`Respawn:OnTooltipShown` adds no second grow-back line to its card. Tested
+in `tools/test_mapicons.lua`. Not yet seen in game.
+
 ## Quest count over quest mobs
 
 The owner picked it (2026-10-13, from a mockup of three light touches):
@@ -1539,7 +1753,8 @@ questcount`. Tested in `tools/test_questmobs.lua`. Not yet seen in game.
 
 A player asked, the owner said build it (2026-10-15): the tooltip's kill
 count to the left of a mob's nameplate. `UI/KillPlates.lua` shows "7/20"
-in red under `Tracker.MIN_KILLS`, then the whole count, and with "Worth
+in bright gold, a size up and outlined (the owner, 2026-10-26: red got
+lost on red ground), under `Tracker.MIN_KILLS`, then the whole count, and with "Worth
 on nameplates" ticked what a kill is worth after it, only from your own
 kills (`KillTooltip:Read`'s kept answer, never an estimate). The same
 mobs as the tooltip (`KillTooltip:Attackable`, `MobName`, hidden ones
@@ -1556,6 +1771,9 @@ yes 2026-10-18: it covered another nameplate addon's text) picks Above
 (over the name), Below (under the cast bar, else the health bar), Left
 or Right (past the quest count when one shows, `QuestMobs:LabelFor`):
 `killPlatesSide`, "left" unless picked, account wide, never rename it.
+A kill that moves the count pops it, a grow and settle with a gold glow
+(`KillPlates:Cheer`, the game's own animations, Window effects Full only);
+nothing floats off it (the owner, 2026-10-26: no "+1").
 Tested in `tools/test_killplates.lua`.
 The crown the kills panel puts after a mob's name (`TrackerUI.MarkFor`,
 through `KillTooltip.Crown`) follows the count on its plate and on the
@@ -1963,6 +2181,65 @@ tables"). It holds names and map IDs only, no drop rates or spawns.
   compared stays English. A new place that shows a zone calls it too.
 
 Tested in `tools/test_zones.lua`. Not yet seen in game.
+
+## One look across the addons (the house kit)
+
+The owner said build all of it (2026-10-29), from the unified look's
+mockups (22 cards and 9 fixes, `reviews/unified-ui/` in the project
+files). These files are the same in all five addons; a fix to one
+belongs in all five:
+
+- `UI/HouseKit.lua`: `Widgets.CreateViewTabs(parent, tabs, onSelect,
+  opts)` (small tabs on top of a list, one a view: Tradeskills' My Crafts
+  and Your Time, Farmer's This Session and Overall; each as wide as its
+  words, never cut), `Widgets.CreateChip` (the filter chip),
+  `Widgets.CreateEmpty` (the emblem faint, one short line, a gold button
+  when there is a next step: "Clear Search", "Show All") and
+  `Widgets.CreatePanelGems(header, { onFold, onClose })` (the gold fold
+  gem and red close gem for panels that stay up while you play; folded,
+  only the header shows; nothing saved).
+- `UI/RowMenu.lua`: a right-click on any row opens its menu, what a click
+  does first, then the rest. Shift-click and Alt-click still work; what
+  the game guards (a craft, a cast, a sale) stays a button.
+- `UI/Notice.lua`: one note slot under the top of the screen for every
+  addon (`ns.Notice:Show(text, { icon, hold, key })`, signed up in
+  `_G.BlackthornesNotice`), so two notes never land on each other.
+- `UI/SharedChoices.lua`: Text Size, Window Style, Effects, Use TomTom,
+  Guide Me and Arrow Size, changed in one addon, are written to every
+  loaded addon (`_G.BlackthornesSharedChoices`); each keeps its own saved
+  key and name, and nothing moves until the player changes one.
+
+The rules that came with it:
+
+- A list's footer is a count or a result on the left and the version on
+  the right, nothing else. What a click does is the last line, dim, of
+  the row's hover. Settings' footer reads "Changes save as you make them."
+- Settings: the General page holds the look (Window Style, Text Size,
+  Effects, Combine Addon Buttons), TRANSPARENT and ADDONS; Settings is
+  the last tab, flush right.
+- Rows are one line: a second line under a name moves to the hover.
+- A sort picked by a column heading lasts the session; nothing is saved.
+- Buttons are Title Case ("Show the Way", "Queue It", "Got It"), and
+  "Show the Way" is our map marker and the arrow (TomTom when picked).
+- Buttons out on the screen on their own wear the gold plaque
+  (`UI/Plaque.lua`).
+
+Farmer's part (2026-10-29): Snap Panels (`UI/PanelSnap.lua`, "Snap
+Panels:" on the General page, on unless unticked, `snapPanels`; never in a
+fight): drop the goals panel near Kills & Loot's bottom edge, or Kills &
+Loot over a loose goals panel, and the goals panel hangs under it again
+(`GoalsUI:Dock`); drop Where to Farm near the goals panel's bottom and it
+opens under it from then on (`goalSpotsUnder`). Never rename either. Kills
+& Loot and Goals wear the panel gems (Goals with a count chip; folded,
+only the header), Kills & Loot's tabs are dark metal with a gold top edge
+on the one picked, Sort opens a menu (`TrackerUI:OpenSort`), the gathered
+value's name is its hover, Stats' This Session and Overall are view tabs,
+the bags-full and clam notes go in the shared note slot, a right-click
+puts the row's own action first in the hide menu (`HideMenu`'s `action`
+lines: Open Loot Table, Show the Way), and the Search, Rankings and Grind
+footers keep only a count or your skill, their hints on the rows' hovers.
+Tested in `tools/test_panelsnap.lua`, `test_panellook.lua`,
+`test_hidelist.lua`, `test_bagsfull.lua` and `test_opennote.lua`.
 
 ## Writing for players
 

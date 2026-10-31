@@ -20,8 +20,9 @@ The rules:
   they do nothing on Retail. A new Forever feature that needs one of these
   is a question for the owner.
 
-Baseline: Forever `main` at `16167e1` (2026-10-24, the fold gem), merged in
-PR #3. `git diff 16167e1 HEAD` on Retail's `main` shows every line below.
+Baseline: Forever `main` at `e8bbd19` (2026-10-31, Forever 1.3.0: One
+Window, the shared minimap button, the house kit), merged in the second
+catch-up (the first was `16167e1`, PR #3). `git diff 16167e1 HEAD` on Retail's `main` shows every line below.
 
 **Keep it current:** every Retail-only PR adds or updates its entry here in
 the same PR, and every catch-up PR moves the baseline line.
@@ -49,8 +50,9 @@ the same PR, and every catch-up PR moves the baseline line.
     loads, so never add it to the TOC.
   - Built on the Classic world: Guide Me (`Data/Travel.lua`,
     `Data/TravelZones.lua`, `Logic/Travel.lua`, `UI/TravelCard.lua`,
-    `UI/TravelMap.lua`) and Gather to cap (`Logic/GatherToCap.lua`,
-    `UI/GatherToCap.lua`).
+    `UI/TravelMap.lua`), Gather to cap (`Logic/GatherToCap.lua`,
+    `UI/GatherToCap.lua`) and the Fishing window (`UI/FishingBar.lua`:
+    Classic lures on a main-hand pole; Retail fishing differs).
 - Listed in the Retail TOC only: `Logic/RoadToMax.lua`, `UI/RoadToMax.lua`
   (section 6), where Forever lists Gather to cap.
 
@@ -73,6 +75,8 @@ So the addon loads and logs in without them (checked by
 - `Logic/Share.lua`: `/farm share drops` only `and ns.Contribute`.
 - `UI/Grinding.lua`: draws `ns.RoadToMaxUI or ns.GatherToCapUI` in `Build`
   and `Render`.
+- `UI/Settings.lua`: the FISHING section and its "Fishing Buttons:" row,
+  and its `Refresh` line, only `if ns.FishingBar`.
 
 **Sync rule: Blend.** Take Forever's change, and keep each guard. A new
 Forever row, command or call into Contribute, Legacy, Travel or GatherToCap
@@ -197,6 +201,13 @@ times go on top of Retail's version, keeping the item icons, the round mask, joi
 spots (never teaching a grow-back time) and the 3 m join. Never take
 Forever's `AddSpot` or `DrawWorld` whole.
 
+Forever built its own, simpler version of these pins (its `3e278ad`,
+`4b444e5`, 2026-10-24 to 26). The second catch-up kept Retail's
+`UI/MapMarkers.lua`, `UI/GrindPins.lua`, `Logic/Gathering.lua`,
+`Logic/Respawn.lua`, `Logic/Fishing.lua`, `tools/test_mapicons.lua` and
+`tools/test_markers.lua` whole; Forever's extra Locale lines for its hover
+stay, unused.
+
 ## 8. Releases and versions (PRs #7, #8)
 
 - `tools/check_release.py`: `FOREVER_PROJECT` refuses a tag whose TOC names
@@ -250,10 +261,9 @@ worth per kill and the best drop (the owner, 2026-10-24: Webwood Lurker at
 88g a kill off one Primal Leggings he had hidden). Every reader goes
 through `DB:IsHiddenItem` or `DB:HidesItem`, so all of them follow.
 Nothing saved changes. Tests in `tools/test_suffixdrops.lua`. Forever has
-the same bug as of `16167e1`; not fixed there from here.
-
-**Sync rule: Keep Retail** for `DB:IsHiddenItem` unless Forever has fixed
-it the same way, then take Forever's.
+the same bug as of `16167e1`; not fixed there from here. Forever fixed it the
+same way (`e2b1864`), so since the second catch-up the code is Forever's
+and only `PROVENANCE.forever` (section 13) differs.
 
 ## 12. The loot table comes to the front for each mob
 
@@ -262,11 +272,8 @@ time, not only when the window opens. The main window and the loot table
 are both `DIALOG` and top level, so a click on a Rankings row lifts the
 main window, and a second mob picked while the loot table was open drew
 behind it (the owner, 2026-10-24). Nothing saved changes. Test in
-`tools/test_loottable.lua`. Forever has the same bug as of `16167e1`; not
-fixed there from here.
-
-**Sync rule: Keep Retail** for the `Raise` line in `LootTableUI:Show`
-unless Forever has fixed it the same way, then take Forever's.
+`tools/test_loottable.lua`. Forever fixed it the same way (`5364144`), so
+since the second catch-up this is Forever's code and no longer differs.
 
 ## 13. No Forever or sister-addon words on Retail
 
@@ -285,7 +292,9 @@ which have no Retail version yet (the owner approved the words,
 - `UI/Settings.lua`: no "Craft or Sell:" row (it needs Tradeskills;
   `/farm tooltip craft` still answers); the TSM and Auctionator hover no
   longer names Tradeskills.
-- `UI/Main.lua` search footer is "Click a row to put it in chat.";
+- `UI/Main.lua` `UI:AddRowHint` (a spot's hover, once the search footer)
+  ends with "Click a row to put it in chat.", not Forever's line about
+  Classic spots;
   `UI/LootTable.lua` and `UI/Rankings.lua` name TSM or Auctionator when no
   price addon is loaded; `Logic/Value.lua` `/farm value` help says
   "at auction prices"; `Data/Database.lua` `PROVENANCE.forever` is "from
@@ -311,6 +320,7 @@ a level) read "400, you have 25" on a level 80 mob and turned skinnable
 corpses grey (the owner said fix it, 2026-10-27).
 
 - `UI/Grinding.lua`: the `leather` layout has no `skill` column;
+  `GrindingUI.RowHint` gives Leather the Cloth view's hover line;
   `GrindingUI.SkinNeed` gives only the data's `skinSkill`; the Leather
   footer uses the Cloth view's words (the "comes from its level" key is
   gone from every `Locale/*.lua`).

@@ -15,6 +15,10 @@ local L = ns.L
 
 local UI = ns.NewModule("UI")
 
+-- Farmer's tabs inside the one Blackthornes window (the end of this file).
+local FarmerTabs = {}
+ns.FarmerTabs = FarmerTabs
+
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
@@ -59,7 +63,7 @@ UI.WIDEST_KEPT = 1600
 function UI:WindowWidth()
     local width = math.max(WIDTH, ns.GrindingUI and ns.GrindingUI.WIDTH or 0,
         ns.StatsUI and ns.StatsUI.WIDTH or 0, self.widest or 0,
-        tonumber(ns.db and ns.db.windowWidth) or 0)
+        tonumber(ns.db and ns.db.windowWidth) or 0, UI.SettingsNeed(1))
     width = math.min(width, UI.WIDEST_KEPT)
     local room = self.ScreenRoom and self:ScreenRoom()
     if room then width = math.max(WIDTH, math.min(width, room)) end
@@ -68,7 +72,13 @@ end
 
 --- The height every tab draws at: the Stats tab's charts want the most.
 function UI:WindowHeight()
-    return math.max(HEIGHT, ns.StatsUI and ns.StatsUI.HEIGHT or 0)
+    return math.max(HEIGHT, ns.StatsUI and ns.StatsUI.HEIGHT or 0, UI.SettingsNeed(2))
+end
+
+--- What the Settings tab needs at least (1 its width, 2 its height), or 0.
+function UI.SettingsNeed(index)
+    local need = ns.SettingsUI and rawget(ns.SettingsUI, "need")
+    return type(need) == "table" and tonumber(need[index]) or 0
 end
 
 --- A tab needs this much room: the shared width grows to it (and is kept)
@@ -87,18 +97,35 @@ end
 --- Size the window to the shared width and height.
 function UI:ApplySize()
     if not self.frame then return end
+    -- Inside the one window it fills the area, which grows instead.
+    if FarmerTabs.area then
+        FarmerTabs:Grow()
+        return
+    end
     local width, height = self:WindowWidth(), self:WindowHeight()
-    if self.frame:GetWidth() ~= width then self.frame:SetWidth(width) end
+    if self.frame:GetWidth() ~= width then
+        self.frame:SetWidth(width)
+        -- Settings stays flush with the window's right end.
+        if self.tabStrip and self.tabStrip.SetRoom then self.tabStrip:SetRoom(width - 2 * TAB_INSET) end
+    end
     if self.frame:GetHeight() ~= height then self.frame:SetHeight(height) end
 end
 
 -- The window's tabs, left to right.
 local TABS = {
-    { key = "search", text = L["SEARCH"] },
-    { key = "rankings", text = L["RANKINGS"] },
-    { key = "grind", text = L["GRIND"] },
-    { key = "stats", text = L["STATS"] },
+    { key = "search", text = L["Search"] },
+    { key = "rankings", text = L["Rankings"] },
+    { key = "grind", text = L["Grind"] },
+    { key = "stats", text = L["Stats"] },
+    -- Always last, on the right (the owner, 2026-10-27: "Last tab on bottom
+    -- right will always be settings"). It opens Settings in the window's
+    -- place, at the same size (UI/Settings.lua).
+    { key = "settings", text = L["Settings"], right = true },
 }
+
+--- The tabs, for Settings to hang the same ones under itself.
+function UI.Tabs() return TABS end
+UI.TAB_INSET = TAB_INSET
 
 -- Column widths, left to right, at their narrowest. The source, where and
 -- drop columns widen to fit what a search turns up, and the window with them:
@@ -298,6 +325,7 @@ function UI:Build()
     -- was closed (Escape, the close gem, the minimap button).
     frame:HookScript("OnHide", function()
         if ns.GoalsUI then ns.GoalsUI:CheckPicker() end
+        FarmerTabs:Closed(frame)
     end)
     -- It also stays outside the window's edge as the window widens or narrows.
     frame:HookScript("OnSizeChanged", function()
@@ -347,18 +375,12 @@ function UI:BuildHeader()
 
     -- The window's name is on the plate across the top edge and the close
     -- gem sits on the top right corner (UI/Titanforged.lua), so the top row
-    -- holds the search box (or the Rankings chips) and the Settings button,
-    -- clear of the portrait on the left.
+    -- holds the search box (or the Rankings chips), clear of the portrait on
+    -- the left. Settings is the last tab below the window.
     local header = CreateFrame("Frame", nil, frame)
     header:SetPoint("TOPLEFT", HEAD_LEFT, -HEAD_TOP)
     header:SetPoint("TOPRIGHT", -PADDING, -HEAD_TOP)
     header:SetHeight(24)
-
-    local settings = Widgets.CreateButton(header, L["Settings"], function()
-        if ns.SettingsUI then ns.SettingsUI:Toggle() end
-    end, { width = 64, height = 24 })
-    settings:SetPoint("TOPRIGHT", 0, 0)
-    self.settingsButton = settings
 
     -- Hung below the window, as the game's own windows wear their tabs. The
     -- one showing reaches up over the rim and joins the window, and a gold
@@ -386,9 +408,9 @@ function UI:BuildBody()
         L["an item, a zone, a mob, or a place"],
         function(text) UI:Search(text, true) end)
 
-    -- Up in the top row, beside the portrait and the Settings button.
+    -- Up in the top row, beside the portrait.
     search:SetPoint("TOPLEFT", HEAD_LEFT, -HEAD_TOP)
-    search:SetPoint("TOPRIGHT", self.settingsButton, "TOPLEFT", -8, 0)
+    search:SetPoint("TOPRIGHT", -PADDING, -HEAD_TOP)
     self.searchBox = search
 
     -- Filter chips sit between the box and the results, showing only the kinds
@@ -439,7 +461,10 @@ function UI:BuildBody()
         createRow = function(row) UI:CreateRow(row) end,
         updateRow = function(row, data, index) UI:UpdateRow(row, data, index) end,
         onClick = function(data, button) UI:OnRowClick(data, button) end,
-        onEnter = function(row) UI:ShowValueTooltip(row) end,
+        onEnter = function(row)
+            UI:ShowValueTooltip(row)
+            UI:AddRowHint(row)
+        end,
         onLeave = function() if GameTooltip then GameTooltip:Hide() end end,
         -- The colour of the well the rows sit in.
         fadeKey = "well",
@@ -471,7 +496,8 @@ function UI:BuildBody()
     footer:SetHeight(26)
     footer:SetWordWrap(true)
     footer:SetJustifyV("MIDDLE")
-    footer:SetText(L["Click a row to put it in chat."])
+    -- No help line here (2026-10-29): it is the last line of a spot's hover.
+    footer:SetText("")
     self.footer = footer
 
     self:BuildEmpty()
@@ -787,6 +813,20 @@ function UI:ShowValueTooltip(row)
     local key = data.source.name
     if ns.Tracker then key = ns.Tracker:KeyFor(key, data.source.zone) end
     self:ShowMobTooltip(row, key)
+end
+
+--- A spot's hover ends with what a click does, dim (2026-10-29; it was
+--- the search footer).
+function UI:AddRowHint(row)
+    local data = row and row.data
+    if not (GameTooltip and data and data.type == "source") then return end
+    if not (GameTooltip.IsOwned and GameTooltip:IsOwned(row)) then
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(data.source.name or data.item.name, Theme.Unpack("accent"))
+    end
+    GameTooltip:AddLine(L["Click a row to put it in chat."],
+        Theme.Unpack("dim"), true)
+    GameTooltip:Show()
 end
 
 --- What a kill of `mobName` is worth and what makes it up, beside `owner`.
@@ -1263,11 +1303,13 @@ function UI:Render()
         self.summary:SetText(("%s, %s"):format(
             Util.Plural(ns.DB:CountItems(), L["item"], L["items"]),
             Util.Plural(ns.DB:CountSources(), L["spot"], L["spots"])))
+        if self.noResults then self.noResults:Hide() end
         self:ShowEmpty()
         return
     end
 
     if self.empty then self.empty:Hide() end
+    if self.noResults then self.noResults:Hide() end
 
     -- Worth is asked once a mob per draw: it walks the whole database.
     self.worthCache = {}
@@ -1317,6 +1359,15 @@ function UI:Render()
         -- Said when hiding (skinning, the hide list) is what emptied it.
         self.summary:SetText(Util.Colored("muted", ns.Search.hidHit
             and L["nothing found, because the matches are hidden"] or L["nothing found"]))
+        -- The house empty block, with a way out (2026-10-29).
+        if not self.noResults and Widgets.CreateEmpty then
+            self.noResults = Widgets.CreateEmpty(self.panel, { width = 300 })
+            self.noResults:SetPoint("TOP", self.panel, "TOP", 0, -60)
+        end
+        if self.noResults then
+            self.noResults:Set(L["Nothing found."], L["Clear Search"], function() UI:Search("") end)
+            self.noResults:Show()
+        end
     else
         self.summary:SetText(L.Format("%s matching", Util.Plural(total, L["item"], L["items"])))
     end
@@ -1422,9 +1473,15 @@ end
 --------------------------------------------------------------------------------
 
 --- Switch the window to a tab: "search", "rankings", "grind" or "stats".
---- Remembered for the next time the window opens.
+--- Remembered for the next time the window opens. "settings" opens
+--- Settings in the window's place.
 function UI:ShowTab(key)
     self:Build()
+    if key == "settings" and ns.SettingsUI then
+        if self.tabStrip then self.tabStrip:Select(self.tab or "search") end
+        ns.SettingsUI:Show()
+        return
+    end
     local views = { rankings = self.rankingsView, grind = self.grindView, stats = self.statsView }
     if not views[key] then key = "search" end
 
@@ -1474,7 +1531,7 @@ end
 --------------------------------------------------------------------------------
 
 function UI:SavePosition()
-    if not (ns.db and self.frame) then return end
+    if not (ns.db and self.frame) or FarmerTabs.area then return end
 
     local point, _, relativePoint, x, y = self.frame:GetPoint()
 
@@ -1499,7 +1556,8 @@ end
 
 --- The window's size, as chosen on the settings page or with its grip.
 function UI:ApplyScale()
-    if self.frame then
+    -- The one window has its own scale.
+    if self.frame and not FarmerTabs.area then
         self.frame:SetScale(((ns.db and ns.db.windowScale) or 100) / 100)
     end
 end
@@ -1528,6 +1586,9 @@ end
 --------------------------------------------------------------------------------
 
 function UI:Show()
+    -- With "One Window:" ticked, the one window opens on Farmer instead,
+    -- and lays this window in.
+    if FarmerTabs:Route() then return end
     self:Build()
 
     -- Asked for again while folded: open it full.
@@ -1536,9 +1597,27 @@ function UI:Show()
         return
     end
 
-    self:RestorePosition()
-    self.frame:Show()
-    ns.Motion:Open(self.frame)
+    -- Settings up as the window's tab: it steps aside, and this opens in its
+    -- place (the same spot keys, size and scale), without the opening rise.
+    local settings = ns.SettingsUI and rawget(ns.SettingsUI, "frame")
+    local switching = settings and settings:IsShown()
+    if switching then
+        ns.SettingsUI.switching, FarmerTabs.switching = true, true
+        pcall(ns.SettingsUI.SavePosition, ns.SettingsUI)
+        settings:Hide()
+        ns.SettingsUI.switching, FarmerTabs.switching = false, false
+    end
+
+    if FarmerTabs.area then
+        FarmerTabs:LayIn(self)
+        self:ApplySize()
+        self.frame:Show()
+    else
+        self:ApplySize()
+        self:RestorePosition()
+        self.frame:Show()
+        if not switching then ns.Motion:Open(self.frame) end
+    end
     -- A light runs round the portrait as it opens.
     if ns.Titanforged then ns.Titanforged:Opened(self.frame) end
 
@@ -1556,6 +1635,13 @@ function UI:Toggle()
 
     if self.frame:IsShown() then
         self:Hide()
+        return
+    end
+
+    -- Settings showing is the window too: the button closes it.
+    local settings = ns.SettingsUI and rawget(ns.SettingsUI, "frame")
+    if settings and settings:IsShown() then
+        ns.SettingsUI:Hide()
         return
     end
 
@@ -1699,8 +1785,8 @@ function UI:BuildMinimapButton()
     button:SetScript("OnClick", function(_, mouseButton)
         if mouseButton == "RightButton" and ns.SettingsUI then
             ns.SettingsUI:Toggle()
-        elseif mouseButton == "MiddleButton" and ns.GoalsUI then
-            ns.GoalsUI:ToggleOrHint()
+        elseif mouseButton == "MiddleButton" then
+            UI:BringBackPanels()
         else
             UI:Toggle()
         end
@@ -1714,7 +1800,7 @@ function UI:BuildMinimapButton()
         GameTooltip:AddLine(ns.VersionLabel(), 0.5, 0.5, 0.5)
         GameTooltip:AddLine(L["Click to open"], 0.7, 0.7, 0.7)
         GameTooltip:AddLine(L["Right-click for settings"], 0.7, 0.7, 0.7)
-        GameTooltip:AddLine(L["Middle-click to show or hide your goals"], 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(L["Middle-click to bring back your panels"], 0.7, 0.7, 0.7)
         GameTooltip:AddLine(L["Drag to move it round the minimap"], 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
@@ -1728,6 +1814,52 @@ function UI:BuildMinimapButton()
     self.lastMinimapWidth = Minimap:GetWidth()
 
     self:ApplyMinimapVisibility()
+    self:JoinSharedMinimap()
+end
+
+--- Middle-click: bring back the Kills & Loot panel when it was closed, and
+--- the goals when they were closed. With neither closed, the goals toggle as
+--- before, which also says how to make one when there are none.
+function UI:BringBackPanels()
+    local brought = false
+    if ns.db and ns.db.trackerHidden and ns.SettingsUI and ns.SettingsUI.SetTrackerShown then
+        ns.SettingsUI:SetTrackerShown(true)
+        brought = true
+    end
+    local GoalsUI = ns.GoalsUI
+    if GoalsUI and #GoalsUI:List() > 0 and not (GoalsUI.frame and GoalsUI.frame:IsShown()) then
+        GoalsUI:Show()
+        brought = true
+    end
+    if not brought and GoalsUI then GoalsUI:ToggleOrHint() end
+end
+
+--- Sign up for the shared Blackthornes button (UI/SharedMinimap.lua).
+function UI:JoinSharedMinimap()
+    if not ns.SharedMinimap or not self.minimapButton then return end
+    ns.SharedMinimap:Join({
+        key = "farmer", order = 1, name = "Blackthornes Farmer",
+        icon = [[Interface\Icons\Trade_Mining]],
+        blurb = L["Where to farm and what it's worth"],
+        button = self.minimapButton,
+        angle = function() return (ns.db and ns.db.minimapAngle) or DEFAULT_ANGLE end,
+        open = function() UI:Toggle() end,
+        settings = function() if ns.SettingsUI then ns.SettingsUI:Toggle() end end,
+        middle = function() UI:BringBackPanels() end,
+        db = function() return ns.db end,
+    })
+    -- And the one Blackthornes window (UI/SharedWindow.lua). Until this
+    -- addon's pages move in, its rail button opens its own window.
+    if ns.SharedWindow then
+        ns.SharedWindow:Join({
+            key = "farmer", order = 1, name = "Farmer", icon = [[Interface\Icons\Trade_Mining]],
+            open = function() UI:Toggle() end,
+            settings = function() if ns.SettingsUI then ns.SettingsUI:Show() end end,
+            db = function() return ns.db end,
+            -- The Search, Rankings, Grind, Stats and Settings tabs show in it.
+            host = FarmerTabs.host,
+        })
+    end
 end
 
 --- Re-seat the button at its stored angle, using the current radius.
@@ -1739,11 +1871,241 @@ function UI:RepositionMinimapButton()
     self.lastMinimapWidth = Minimap and Minimap:GetWidth()
 end
 
---- The button always shows (the owner, 2026-10-15). A saved minimapHidden
---- from before is kept in the save but no longer read.
+--- The button always shows (the owner, 2026-10-15), unless it is folded
+--- into the shared Blackthornes button. A saved minimapHidden from before
+--- is kept in the save but no longer read.
 function UI:ApplyMinimapVisibility()
     local button = self.minimapButton
     if not button then return end
 
-    button:Show()
+    if ns.SharedMinimap and ns.SharedMinimap.Hides("farmer") then
+        button:Hide()
+    else
+        button:Show()
+    end
+end
+
+--------------------------------------------------------------------------------
+-- The one window
+--
+-- With "One Window:" ticked (UI/SharedWindow.lua, the owner said build it,
+-- 2026-10-30), Farmer's tabs show inside the one Blackthornes window: the
+-- main window (Search, Rankings, Grind, Stats) and Settings are laid into
+-- its area, filling it, without their own rim, plate, portrait, gems or
+-- size grip, since the one window has its own. Their tabs still hang below,
+-- under the one window's edge. Unticked, or when another addon is picked on
+-- the rail, they go back to their own place, size and scale. The panels
+-- that stay up while you play (Kills & Loot, Goals, the arrow and the rest)
+-- stay their own.
+--------------------------------------------------------------------------------
+
+-- The one window's area while Farmer's tabs are in it, else nil.
+FarmerTabs.area = nil
+-- The tab to show when the one window lays Farmer in.
+FarmerTabs.wanted = nil
+-- True while the tabs go back, or one steps aside for another, so their
+-- OnHide does not close the one window too.
+FarmerTabs.leaving = false
+FarmerTabs.switching = false
+
+-- Farmer's two windows: the main one and Settings.
+local function Windows()
+    return { UI, ns.SettingsUI }
+end
+
+local function FrameOf(window)
+    return window and rawget(window, "frame")
+end
+
+local function Shown(frame)
+    if not frame then return false end
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and shown == true
+end
+
+--- The copy of the one window that draws it, or nil.
+function FarmerTabs.One()
+    local SharedWindow = ns.SharedWindow
+    if not (SharedWindow and SharedWindow.Drawer) then return nil end
+    local ok, drawer = pcall(SharedWindow.Drawer)
+    local api = ok and type(drawer) == "table" and drawer.api or nil
+    return type(api) == "table" and api or nil
+end
+
+--- True while Farmer's tabs show in the one window.
+function FarmerTabs:Hosted()
+    return self.area ~= nil
+end
+
+-- What a window wears, put out of sight inside the one window and back
+-- after: the trim (plate, portrait, close and fold gems, corners), the size
+-- grip and the rim drawn on the frame itself.
+local function Bare(window, bare)
+    local frame = FrameOf(window)
+    if not frame then return end
+    local trim = rawget(window, "trim") or rawget(frame, "titan")
+    if trim and trim.SetShown then trim:SetShown(not bare) end
+    local grip = rawget(window, "sizeGrip")
+    if grip and grip.SetShown then grip:SetShown(not bare) end
+    if bare then
+        if rawget(window, "bareRim") then return end
+        local kept = {}
+        local ok, regions = pcall(function() return { frame:GetRegions() } end)
+        for _, region in ipairs(ok and regions or {}) do
+            local okLayer, layer = pcall(region.GetDrawLayer, region)
+            if okLayer and layer == "BORDER" and region:IsShown() then
+                region:Hide()
+                kept[#kept + 1] = region
+            end
+        end
+        window.bareRim = kept
+        pcall(frame.RegisterForDrag, frame)
+    else
+        for _, region in ipairs(rawget(window, "bareRim") or {}) do region:Show() end
+        window.bareRim = nil
+        pcall(frame.RegisterForDrag, frame, "LeftButton")
+    end
+end
+
+--- Lay one window into the area, filling it.
+function FarmerTabs:LayIn(window)
+    local frame, area = FrameOf(window), self.area
+    if not (frame and area) then return end
+    if frame:GetParent() ~= area then frame:SetParent(area) end
+    frame:ClearAllPoints()
+    frame:SetAllPoints(area)
+    frame:SetScale(1)
+    Bare(window, true)
+    local strip = rawget(window, "tabStrip")
+    if strip then
+        -- Hung from the one window's own bottom edge, not the area's.
+        local one = area:GetParent()
+        local drop = 8
+        if one then
+            local okA, a = pcall(area.GetBottom, area)
+            local okO, o = pcall(one.GetBottom, one)
+            if okA and okO and type(a) == "number" and type(o) == "number" then drop = a - o end
+        end
+        strip:ClearAllPoints()
+        strip:SetPoint("TOPLEFT", area, "BOTTOMLEFT", TAB_INSET, -drop)
+        local ok, width = pcall(area.GetWidth, area)
+        if ok and type(width) == "number" and width > 0 and strip.SetRoom then
+            strip:SetRoom(width - 2 * TAB_INSET)
+        end
+    end
+end
+
+--- Give one window back its own place, size and scale.
+function FarmerTabs:LayOut(window)
+    local frame = FrameOf(window)
+    if not frame then return end
+    frame:SetParent(UIParent)
+    Bare(window, false)
+    local strip = rawget(window, "tabStrip")
+    if strip then
+        strip:ClearAllPoints()
+        strip:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", TAB_INSET, 0)
+    end
+    if window.RestorePosition then pcall(window.RestorePosition, window) end
+    -- The size is asked for afresh, so the tabs' room follows it too.
+    frame:SetWidth(1)
+    if window == UI then
+        UI:ApplyScale()
+        UI:ApplySize()
+    else
+        if Widgets.ApplySize then Widgets.ApplySize(frame, ns.db and ns.db.windowScale) end
+        if window.TakeWindowSize then pcall(window.TakeWindowSize, window) end
+    end
+end
+
+--- Grow the one window until its area holds the size every tab shares.
+function FarmerTabs:Grow()
+    local area = self.area
+    local one = area and area:GetParent()
+    if not one then return end
+    local width, height = UI:WindowWidth(), UI:WindowHeight()
+    local okW, areaW = pcall(area.GetWidth, area)
+    local okH, areaH = pcall(area.GetHeight, area)
+    if okW and type(areaW) == "number" and areaW > 0 and areaW < width then
+        one:SetWidth(one:GetWidth() + (width - areaW))
+    end
+    if okH and type(areaH) == "number" and areaH > 0 and areaH < height then
+        one:SetHeight(one:GetHeight() + (height - areaH))
+    end
+end
+
+--- Open a tab inside the one window.
+function FarmerTabs:Open(key)
+    if key == "settings" and ns.SettingsUI then
+        ns.SettingsUI:Show()
+        return
+    end
+    key = key or (ns.db and ns.db.lastTab) or "search"
+    UI.searching = key ~= "search" or nil
+    UI:Show()
+    UI.searching = nil
+    UI:ShowTab(key)
+end
+
+--- Farmer's tabs go into the one window: called by it (host.enter).
+function FarmerTabs:Enter(area)
+    if not area then return end
+    self.area = area
+    UI:Build()
+    for _, window in ipairs(Windows()) do
+        if FrameOf(window) then FarmerTabs:LayIn(window) end
+    end
+    FarmerTabs:Grow()
+    local key = self.wanted
+    self.wanted = nil
+    FarmerTabs:Open(key)
+end
+
+--- Farmer's tabs go back: called by the one window (host.leave).
+function FarmerTabs:Leave()
+    if not self.area then return end
+    self.leaving = true
+    for _, window in ipairs(Windows()) do
+        local frame = FrameOf(window)
+        if Shown(frame) then
+            local ok, err = pcall(frame.Hide, frame)
+            if not ok and ns.Debug then ns.Debug("one window leave:", tostring(err)) end
+        end
+    end
+    self.area = nil
+    for _, window in ipairs(Windows()) do
+        if FrameOf(window) then FarmerTabs:LayOut(window) end
+    end
+    self.leaving = false
+end
+
+--- What Farmer gives the one window when it joins.
+FarmerTabs.host = {
+    enter = function(area) FarmerTabs:Enter(area) end,
+    leave = function() FarmerTabs:Leave() end,
+}
+
+--- A Farmer tab is asked to open. With "One Window:" ticked and Farmer not
+--- in it yet, the one window opens on Farmer instead, on that tab. True when
+--- it did, so the caller stops there.
+function FarmerTabs:Route(key)
+    if self.area then return false end
+    local One = FarmerTabs.One()
+    if not (One and One.Hosts and One.Hosts("farmer")) then return false end
+    self.wanted = key
+    local ok, opened = pcall(One.Open, "farmer")
+    if ok and opened then return true end
+    self.wanted = nil
+    return false
+end
+
+--- One of Farmer's windows closed by itself (Escape, its close gem):
+--- inside the one window, the one window closes with it.
+function FarmerTabs:Closed(frame)
+    if not self.area or self.leaving or self.switching then return end
+    -- A window built for the first time hides itself before it is laid
+    -- in, and that is no close: only one inside the area counts.
+    if frame and frame.GetParent and frame:GetParent() ~= self.area then return end
+    local One = FarmerTabs.One()
+    if One and One.Close then pcall(One.Close) end
 end
