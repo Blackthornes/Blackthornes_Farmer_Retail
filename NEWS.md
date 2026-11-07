@@ -23,6 +23,19 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.48.0
+
+- The Grind tab shows what each camp earns you an hour. A new Best Worth sort puts the best camps on top.
+- Map markers show only the herbs, ore and fish spots your character can gather. You can turn this off under Markers in Settings.
+- Item icons have quality rings and counts in the corner.
+- You can drag the Top 15 window where you want it. Set Default in Settings, on the Kills page, puts it back.
+- Drop rates on a mob's loot table count your guild's kills too, once you've killed that mob 20 times yourself. Guild sharing has to be on.
+- You can turn off the beam over your fishing bobber if it hides the bob. It is in Settings, on the Map & goals page, under Sparkles.
+
+Fixes and changes:
+
+- Various bug fixes.
+
 ## 0.47.3
 
 Fixes and changes:
