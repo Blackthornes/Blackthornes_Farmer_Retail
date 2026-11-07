@@ -173,6 +173,36 @@ fighting = false
 NodeSparkle:ApplySettings()
 suite.check("after the fight it is", cvars.SoftTargetInteract == "3")
 
+-- The player turns the game's Interact Key off after Farmer turned it on:
+-- Farmer leaves it off from then on, and its nameplate goes back too.
+cvars.SoftTargetInteract = "0"
+before = sets
+NodeSparkle:ApplySettings()
+suite.check("an interact key the player turned off stays off", cvars.SoftTargetInteract == "0", cvars.SoftTargetInteract)
+suite.check("and is noted as theirs", ns.db.nodeSparkleCVarsLeft.SoftTargetInteract == true)
+suite.check("and nothing is kept to put back for it", ns.db.nodeSparkleCVars.SoftTargetInteract == nil)
+suite.check("its nameplate goes back as they had it", cvars.SoftTargetNameplateInteract == "0")
+NodeSparkle:ApplySettings()
+NodeSparkle:ApplySettings()
+suite.check("a loading screen later it is still off", cvars.SoftTargetInteract == "0")
+suite.check("and the other settings are untouched", cvars.SoftTargetInteractRange == "15" and cvars.SoftTargetIconGameObject == "1")
+NodeSparkle:SetEnabled(false)
+suite.check("off leaves the interact key as the player set it", cvars.SoftTargetInteract == "0")
+suite.check("and puts the rest back", cvars.SoftTargetInteractRange == "10")
+NodeSparkle:SetEnabled(true)
+suite.check("ticking the box again turns it on again", cvars.SoftTargetInteract == "3")
+suite.check("and forgets it was left", next(ns.db.nodeSparkleCVarsLeft or {}) == nil)
+
+-- Farmer turning the nameplate down itself (facing a creature) is no sign
+-- the player changed it.
+cvars.SoftTargetNameplateInteract = "0"
+NodeSparkle:ApplySettings()
+suite.check("the nameplate Farmer moves is not taken as the player's", cvars.SoftTargetNameplateInteract == "1"
+    and not (ns.db.nodeSparkleCVarsLeft and ns.db.nodeSparkleCVarsLeft.SoftTargetNameplateInteract))
+NodeSparkle:SetEnabled(false)
+cvars.SoftTargetInteract = "1"
+NodeSparkle:SetEnabled(true)
+
 -- The command and the Settings box.
 ns.HandleSlash("sparkle")
 suite.check("/farm sparkle turns it off", ns.db.nodeSparkle == false)
@@ -337,6 +367,31 @@ Face("Kaja", NPC)
 suite.check("a plate the player turned on is left alone", cvars.SoftTargetNameplateInteract == "1")
 ns.db.nodeSparkleCVars = keep
 
+-- Already on before Farmer came to it, with friendly NPC nameplates off:
+-- the player's value is kept to put back, NPCs lose the plate and nodes
+-- keep it while sparkles are on.
+ns.NodeSparkle:SetEnabled(false)
+keep = ns.db.nodeSparkleCVars
+ns.db.nodeSparkleCVars = {}
+cvars.SoftTargetNameplateInteract = "1"
+cvars.nameplateShowFriendlyNPCs = "0"
+ns.NodeSparkle:SetEnabled(true)
+suite.check("a plate already on is kept to put back", ns.db.nodeSparkleCVars.SoftTargetNameplateInteract == "1")
+Face("Kaja", NPC)
+suite.check("an NPC loses the plate when friendly NPC nameplates are off", cvars.SoftTargetNameplateInteract == "0")
+Face("Copper Vein", VEIN)
+suite.check("a node still gets it", cvars.SoftTargetNameplateInteract == "1")
+cvars.nameplateShowFriendlyNPCs = "1"
+Face("Kaja", NPC)
+suite.check("with friendly NPC nameplates on it stays", cvars.SoftTargetNameplateInteract == "1")
+cvars.nameplateShowFriendlyNPCs = "0"
+Face("Kaja", NPC)
+ns.NodeSparkle:SetEnabled(false)
+suite.check("turning sparkles off puts the player's own back", cvars.SoftTargetNameplateInteract == "1")
+cvars.nameplateShowFriendlyNPCs = nil
+cvars.SoftTargetNameplateInteract = "0"
+ns.db.nodeSparkleCVars = keep
+
 -- Fishing: a cast lands past the usual reach, so the reach goes up while
 -- the Fishing channel runs, and comes back when it ends.
 NodeSparkle:SetEnabled(true)
@@ -405,10 +460,44 @@ suite.check("too low is grey", NodeSparkle.SkillColor(40, 65, true) == C.grey)
 skills = nil
 Face("Copper Vein", VEIN)
 suite.check("no skills read is gold", NodeSparkle.tint == NodeSparkle.GOLD)
+
+-- Forever's "Wilted Peacebloom" and "Stunted Silverleaf" (a player's
+-- report, 2026-11-05): a word in front of a known node still sparkles, in
+-- that node's skill colour.
+skills = { Herbalism = 200 }
+suite.check("a wilted herb is a node", NodeSparkle:IsNode("Wilted Peacebloom"))
+suite.check("a stunted herb is a node", NodeSparkle:IsNode("Stunted Silverleaf"))
+local herbSkill, herbNeed = NodeSparkle:NodeNeeds("Wilted Peacebloom")
+suite.check("a wilted herb takes its herb's need", herbSkill == "Herbalism" and herbNeed == 1)
+Face("Wilted Peacebloom", VEIN)
+suite.check("a wilted herb sparkles green far past it", NodeSparkle.frame:IsShown() and NodeSparkle.tint == C.green)
+suite.check("a name that only ends in a word is not a node", not NodeSparkle:IsNode("Copper Veinstone"))
+suite.check("an unknown name is still not a node", not NodeSparkle:IsNode("Wilted Old Statue"))
+ns.db.gathering = ns.db.gathering or {}
+ns.db.gathering.nodes = ns.db.gathering.nodes or {}
+ns.db.gathering.nodes["test|Stunted Silverleaf"] = { node = "Stunted Silverleaf", kind = "herb" }
+local leafSkill = NodeSparkle:NodeNeeds("Stunted Silverleaf")
+suite.check("a gathered stunted herb still takes its herb's need", leafSkill == "Herbalism")
+ns.db.gathering.nodes["test|Stunted Silverleaf"] = nil
 Face("Battered Chest", VEIN)
 suite.check("a chest is white", NodeSparkle.tint == C.white)
 Face("Fishing Bobber", VEIN)
 suite.check("the bobber is white", NodeSparkle.tint == C.white)
+-- The bobber's own switch (a player found the beam hid the bob, 2026-11-07).
+suite.check("bobber beam on by default", ns.DEFAULTS.nodeSparkleBobber == true)
+ns.HandleSlash("sparkle bobber off")
+suite.check("bobber off is saved", ns.db.nodeSparkleBobber == false)
+suite.check("the bobber gets nothing while it is off", Face("Fishing Bobber", VEIN) == "notnode"
+    and not NodeSparkle.frame:IsShown())
+Face("Battered Chest", VEIN)
+suite.check("a chest still sparkles with the bobber off", NodeSparkle.frame:IsShown())
+suite.check("the bobber is still known for reeling in", NodeSparkle:IsBobber("Fishing Bobber"))
+ns.SettingsUI:Refresh()
+suite.check("Settings shows it unticked", ns.SettingsUI.controls.nodeSparkleBobber
+    and not ns.SettingsUI.controls.nodeSparkleBobber:GetChecked())
+ns.HandleSlash("sparkle bobber on")
+suite.check("bobber on again", ns.db.nodeSparkleBobber == true)
+suite.check("and it shines", Face("Fishing Bobber", VEIN) == "shown")
 skills = { Mining = 30 }
 ns.HandleSlash("sparkle colors off")
 suite.check("colors off is saved", ns.db.nodeSparkleColors == false)

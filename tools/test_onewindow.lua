@@ -49,6 +49,29 @@ UI:ShowTab("settings")
 suite.check("Settings is in the same area", SettingsUI.frame:GetParent() == area and SettingsUI.frame:IsShown())
 suite.check("and the main window stepped aside", not UI.frame:IsShown())
 suite.check("the one window stays up", hub.frame:IsShown() and Tabs:Hosted())
+
+-- Show Descriptions makes the pages taller: the one window grows to hold
+-- them. On the client Settings fills the area, so its own size only says
+-- how big the area is; the stand-in frame is made to answer the same way.
+do
+    local frame = SettingsUI.frame
+    local getW, getH = frame.GetWidth, frame.GetHeight
+    frame.GetWidth = function() return area:GetWidth() end
+    frame.GetHeight = function() return area:GetHeight() end
+    local before, oneBefore = area:GetHeight(), hub.frame:GetHeight()
+    SettingsUI.pages:ShowDescriptions(true)
+    local need = SettingsUI.pages.need
+    suite.check("descriptions on: the pages say how tall they are", type(need) == "table" and need[2] > before)
+    suite.check("Settings keeps what the pages need", SettingsUI.need and SettingsUI.need[2] == need[2])
+    -- The test's frames don't follow their anchors, so the area keeps its
+    -- old height; the one window around it is what grows.
+    suite.check("and the one window grows to hold them",
+        hub.frame:GetHeight() - oneBefore >= need[2] - before
+        or hub.frame:GetHeight() >= SW.Room(hub.frame))
+    suite.check("but never taller than the screen", hub.frame:GetHeight() <= SW.Room(hub.frame))
+    SettingsUI.pages:ShowDescriptions(false)
+    frame.GetWidth, frame.GetHeight = getW, getH
+end
 SettingsUI:OpenTab("rankings")
 suite.check("Rankings back in the area", UI.frame:IsShown() and UI.tab == "rankings"
     and UI.frame:GetParent() == area and not SettingsUI.frame:IsShown())
@@ -100,6 +123,13 @@ suite.check("Settings opens on its own again", not Tabs:Hosted() and SettingsUI.
 SettingsUI:SetOneWindow(true)
 suite.check("ticked again in every save", ns.db.oneWindow == true and other.oneWindow == true)
 suite.check("and Settings moves into the one window", Tabs:Hosted() and SettingsUI.frame:GetParent() == hub.frame.area)
+
+-- 6. Window Position's Set Default while hosted leaves the window where it is
+-- (a player's report, 2026-10-31: it pulled the page out of the one window).
+rawset(SettingsUI.frame, "_point", nil)
+SettingsUI:ResetPositions()
+suite.check("Set Default keeps Settings in the one window", Tabs:Hosted()
+    and SettingsUI.frame:GetParent() == hub.frame.area and rawget(SettingsUI.frame, "_point") == nil)
 
 SW.SetOn(false)
 _G.BlackthornesWindow = nil

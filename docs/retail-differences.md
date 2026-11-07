@@ -20,9 +20,10 @@ The rules:
   they do nothing on Retail. A new Forever feature that needs one of these
   is a question for the owner.
 
-Baseline: Forever `main` at `e8bbd19` (2026-10-31, Forever 1.3.0: One
-Window, the shared minimap button, the house kit), merged in the second
-catch-up (the first was `16167e1`, PR #3). `git diff 16167e1 HEAD` on Retail's `main` shows every line below.
+Baseline: Forever `main` at `fb9c791` (2026-11-07, Forever 1.8.0: camp
+worth, quality rings and coin columns, My Professions Only, Bobber Beam,
+guild sharing fixes), merged in the third catch-up (before it `e8bbd19`,
+PR #25, and `16167e1`, PR #3). `git diff 16167e1 HEAD` on Retail's `main` shows every line below.
 
 **Keep it current:** every Retail-only PR adds or updates its entry here in
 the same PR, and every catch-up PR moves the baseline line.
@@ -52,7 +53,11 @@ the same PR, and every catch-up PR moves the baseline line.
     `Data/TravelZones.lua`, `Logic/Travel.lua`, `UI/TravelCard.lua`,
     `UI/TravelMap.lua`), Gather to cap (`Logic/GatherToCap.lua`,
     `UI/GatherToCap.lua`) and the Fishing window (`UI/FishingBar.lua`:
-    Classic lures on a main-hand pole; Retail fishing differs).
+    Classic lures on a main-hand pole; Retail fishing differs), with One
+    Key Fishing (`UI/OneKeyFishing.lua`) and the Fishing Panel
+    (`UI/FishingPanel.lua`), both built on it. `Bindings.xml` (One Key
+    Fishing's key; the game reads it by itself, not through the TOC) is
+    left out of the zip in `.pkgmeta`.
 - Listed in the Retail TOC only: `Logic/RoadToMax.lua`, `UI/RoadToMax.lua`
   (section 6), where Forever lists Gather to cap.
 
@@ -75,8 +80,10 @@ So the addon loads and logs in without them (checked by
 - `Logic/Share.lua`: `/farm share drops` only `and ns.Contribute`.
 - `UI/Grinding.lua`: draws `ns.RoadToMaxUI or ns.GatherToCapUI` in `Build`
   and `Render`.
-- `UI/Settings.lua`: the FISHING section and its "Fishing Buttons:" row,
-  and its `Refresh` line, only `if ns.FishingBar`.
+- `UI/Settings.lua`: the FISHING section only when one of the fishing
+  files is loaded; its "Fishing Buttons:", "One Key Fishing:" and "Fishing
+  Panel:" rows and their `Refresh` lines only `if ns.FishingBar`,
+  `ns.OneKeyFishing`, `ns.FishingPanel`.
 
 **Sync rule: Blend.** Take Forever's change, and keep each guard. A new
 Forever row, command or call into Contribute, Legacy, Travel or GatherToCap
@@ -169,12 +176,15 @@ elementals). `Logic/Gathering.lua`: `Gathering.CorpseWindow`,
 `Gathering:IsCreatureName`, `Gathering:FromCreature` and the lines in
 `Gathering:OnLoot` that mark such a record `creature = true` (never rename
 it) and put no map spot down. `Logic/GrindGather.lua`'s `Zones` and
-`RoadToMax`'s `OwnGathering` leave them out; `UI/MapMarkers.lua`'s
-`SpotsOn` draws no pin for a spot named for a mob you killed. Records are
+`RoadToMax`'s `OwnGathering` and `Logic/CampWorth.lua`'s `Index` (the
+Grind tab's "This camp: X an hour") leave them out; `UI/MapMarkers.lua`'s
+`SpotsOn` draws no pin for a spot named for a mob you killed, and there
+also keeps Forever's My Professions Only filter (`KindShows`) before
+`Gathering.Joined`. Records are
 never rewritten. Tested in `tools/test_roadtomax.lua`.
 
 **Sync rule: Blend.** Keep these lines if Forever changes `OnLoot`,
-`GrindGather:Zones` or `SpotsOn`.
+`GrindGather:Zones`, `CampWorth:Index` or `SpotsOn`.
 
 ## 7. Item icons on map pins, fishing pins, nearby nodes join (PR #10, the pin fix)
 

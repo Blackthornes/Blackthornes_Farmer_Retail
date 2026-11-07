@@ -36,8 +36,7 @@ ever touch the Forever addon. So:
   from Forever on purpose and whether a sync keeps Retail's lines or blends
   Forever's change in. Every Retail-only PR adds or updates its entry
   there. Last
-  caught up to Forever's `e8bbd19` (2026-10-31, Forever 1.3.0: One Window,
-  the shared minimap button and the house kit).
+  caught up to Forever's `fb9c791` (2026-11-07, Forever 1.8.0).
 - The Retail TOC also leaves out these Forever features
   (`env.RETAIL_LEFT_OUT`, checked by `tools/test_retail.lua`): drop sending
   (`Logic/Contribute.lua`) and Legacy perks (`Logic/Legacy.lua`), both
@@ -46,7 +45,9 @@ ever touch the Forever addon. So:
   world's; and Gather to cap (`Logic/GatherToCap.lua`,
   `UI/GatherToCap.lua`), built on Classic's 1 to 300 skill ladder; and
   the Fishing window (`UI/FishingBar.lua`, Cast and Add Lure), built for
-  Classic lures on a main-hand pole. Their
+  Classic lures on a main-hand pole, with One Key Fishing
+  (`UI/OneKeyFishing.lua`, its `Bindings.xml` left out of the zip) and
+  the Fishing Panel (`UI/FishingPanel.lua`). Their
   Settings rows and commands show only where they are loaded. A Retail
   version of either is its own job, on the owner's yes.
 - Road to max (the owner approved the mockup and its words, 2026-10-24,
@@ -391,8 +392,16 @@ want, records) through hooks on the partner state (`sections`, `store`,
 
 - Finding guildmates: each side says hello on the GUILD addon channel
   (`G<farmer id>:<hash of its drop records>`) 30 s after login and every
-  quarter hour (2026-10-22, a player's report), and once (at most a minute
-  apart) to someone new. A hello whose
+  quarter hour (2026-10-22, a player's report), and a hello back to
+  someone new or quiet a while (`AnswerSoon`, at most one a minute; one
+  asked for sooner waits for the minute and covers everyone heard
+  meanwhile, never dropped). A copy that just loaded (login, reload, the
+  check) also says `N<id>:<hash>` right after its `G` (2026-11-05, the
+  owner's guild saw nothing: he reloads often, and an answer held by the
+  minute rule was dropped, so after a reload nobody answered him); every
+  copy answers an `N` whatever it heard before, an older copy ignores it,
+  and a `G` heard within `HEARD_US` seconds of our own hello is taken as
+  the answer to it, not asked back. A hello whose
   hash is not the one last taken in full (`guildIn[...].top`) queues that
   guildmate; one is synced at a time, each at most every ten minutes, waited
   on while its records keep coming (`STILL_COMING`), and a
@@ -410,7 +419,17 @@ want, records) through hooks on the partner state (`sections`, `store`,
   `DB:RemoveSource` puts it back), a few records
   a frame and only the changed ones (`GuildShare:Publish`). A mob's loot
   table shows no rate before the player's own (the owner, 2026-10-15), the
-  guild's included. Nothing in the windows says "guild" (the owner, 2026-10-13:
+  guild's included. From the player's own `Tracker.MIN_KILLS` on (the
+  owner, 2026-11-04), the loot table's Drop Rate and Per Kill blend the
+  guild's corpses in, counted the same as the player's with no cap, for
+  the items already on the player's table only (`GuildShare:LootFor`, a
+  lookup by mob laid out once `dropsVersion` moves; `LootTableUI.Blend`):
+  rate = (own + guild corpses with it) / (own + guild kills), Per Kill =
+  that rate times the blended amount a drop times `Value:WorthOf`, and the
+  worth a kill at the top follows the rows. A zone's line takes that
+  zone's guild records only; suffixes group as the player's do. Kills,
+  "12 of 40", "x57", which rows show, the kills panel, Rankings, tooltips
+  and every saved count are untouched; no new rows. Nothing in the windows says "guild" (the owner, 2026-10-13:
   "The UI should be all about the player"): no tag, no note; only Settings
   and `/farm share` name it. Turned off, the rows leave and the data stays.
 - Safety: records must pass `GuildShare.Plausible`, at most `MAX_GUILDMATES`
@@ -511,6 +530,26 @@ any of it. The data rows are kept until `DB.hiddenVersion` or the counts
 move (`GrindGather:DataRows`). Tested in `tools/test_grindgather.lua`.
 Not yet seen in game.
 
+## Camp worth on the Grind tab
+
+The owner said build it (2026-10-31, after trying it in Classic Era): on
+the Cloth and Leather views each camp band says "This camp: X an hour",
+worked out only from your own play in that camp's subzone
+(`Logic/CampWorth.lua`): each mob's `Value:FromTally` (your own rates)
+weighted by your kills there, its coin, and the herbs or ore you picked
+there (`gathering.nodes`, priced by `GrindGather.Worth`), all at your own
+pace (`Stats:SecondsPerKill`, `gathering.pace`). Never shipped or guild
+data. Under `Tracker.MIN_KILLS` kills in the camp the band says "Farm here
+a while to see" and its mobs' worth reads "--". YOUR KILLS shows "88
+(35%)", or "7/20" in red; a herb row "Kingsblood (herb)" sits in its camp;
+the band's hover adds AN HOUR HERE (`GrindingUI.HourLines`); the Sort menu
+has Best Worth (`grindSort` "worth", not the default). The footer is still
+the count only. Nothing is saved: `CampWorth:Index` is laid out once a
+stamp (Stats, Harvest, pace and hide versions), and camps are worked out
+`BUDGET` a frame while the tab shows (`CampWorth:For`, `Step`). Ore, Herbs
+and Fish are unchanged. Tested in `tools/test_campworth.lua`. Not yet seen
+in game.
+
 ## Grind: Fish
 
 The owner said build it (2026-10-24, from a mockup): a **Fish** chip on the
@@ -566,6 +605,56 @@ all account wide, never rename them; `/farm fishbar [on|off]`. Luremaster
 (`Logic/Legacy.lua`) is untouched. Tested in `tools/test_fishingbar.lua`.
 Not yet seen in game.
 
+
+## One key fishing
+
+Brought over from Classic Farmer (the owner said yes, 2026-10-31, on the
+rule that it only does what applies on Forever and breaks nothing here):
+one key puts on a lure, casts and reels in. `UI/OneKeyFishing.lua`: a
+hidden secure button, `BlackthornesFarmerFishKey`, bound in `Bindings.xml`
+("Fish" under "Blackthornes Farmer" in the game's Key Bindings; the file
+is read by the client and is not in the TOC). Out of combat it is a lure
+macro (`OneKeyFishing.LureMacro`: `/use item:ID` then `/use 16`) when
+`FishingBar.LureOnPole()` says none is on and `FishingBar:Lures(skill)`
+has a usable one, best first, else a cast of `FishingBar.SpellName()`; a
+pole must be held (`HoldsPole`). It only reads the Fishing window's
+calls, never changes `UI/FishingBar.lua`. While Fishing channels the key
+is pointed (`SetOverrideBinding`) at the game's interact action only
+while the soft interact target is the bobber (entry 35591 in its guid, or
+`NodeSparkle:IsBobber` by name); facing anything else it clicks
+`BlackthornesFarmerFishNote`, which opens nothing and shows in the shared
+note slot "Face your bobber to reel in." when the key picks something else,
+or "Your bobber is too far to reel in. Cast again from closer." when it
+picks nothing at all (it reaches all round, so nothing means out of reach;
+2026-11-02). Soft interact is raised to 3
+(the old value kept in `oneKeyFishingInteract`) and its reach through
+`NodeSparkle:RaiseReach(true)`, all put back when the channel ends or a
+fight starts; nothing changes in a fight. Off unless ticked: "One Key
+Fishing:" under FISHING on the Loot page (`oneKeyFishing`); turned on
+with no key set, chat says where to set one. Both keys account wide,
+never rename them. Tested in `tools/test_onekeyfishing.lua`. Not yet seen
+in game.
+
+## The fishing panel
+
+A player asked, the owner said build it (2026-11-02, from a mockup whose
+words he approved): a slim strip under the Fishing window's Cast and Add
+Lure opens a panel with three tabs. This Session (time, casts, catches,
+gold, gold an hour, with Pause and Start Over), This Spot (catch rates
+once 20 casts are behind them, "Best hour here:") and Fish Log (every
+fish ever caught, from `fishing.spots`). The lifts: New Catch ("First one
+you've ever caught.", a fish no spot has yet, `FishingPanel:Fresh`, read
+before `Fishing:Record` counts it), Best Hour Yet ("Your best here was
+X.", once a spot has `BEST_AFTER` seconds of casts close together, gaps
+over `Fishing.BREAK` left out, cheered once a session a spot), the Next
+Rate Unlock bar, coins counting up and a gold glow on new fish.
+`UI/FishingPanel.lua`; `Fishing:Record` calls `FishingPanel:Caught`. The
+session is kept in memory only. Off unless ticked: "Fishing Panel:" under
+FISHING on the Loot page and `/farm fishpanel [on|off]`. Saved, account
+wide, never rename them: `fishingPanel`, `fishingPanelBest` (`[spot key]`
+= the best gold an hour seen there, copper) and `fishingPanelScale`.
+Never name or copy the addon the player showed. Tested in
+`tools/test_fishingpanel.lua`. Not yet seen in game.
 
 ## The gold plaque
 
@@ -835,6 +924,23 @@ MailInfo, Merchant, Trainer and Auctioneer, else 17, 5, 7 and 21); a later
 close event for the same place changes nothing. At the auction house only
 Tradeskills is needed (`PLACES.auction.only`). Tested in
 `tools/test_sharedwindow.lua`. Not yet seen in game.
+
+Kept beside (2026-10-31, FILE_VERSION 3): while a game window is open, a
+watcher on the one window (`SharedWindow.Keep`, every `KEEP_EVERY`
+seconds, only while shown, never in a fight) docks it once the game shows
+its window late, and places it beside again when the game's window moves
+or the one window changes width or scale (`hub.spot`). A window too wide
+for the room left was pulled back over the auction house by the screen's
+edge, then narrowed to the Auction House tab where it stood. Dragged by
+hand while docked, it stays. Tested in `tools/test_sharedwindow.lua`.
+
+Closed by the player (2026-11-01, FILE_VERSION 4): closed while a game
+window is open (its close gem, or Escape, which closes the vendor too),
+it stays closed when that window goes; it never comes back by itself. Only
+an addon closing it on leaving a place, `SharedWindow.Close(true)`, lets it
+go back to the addon open before (`hub.byItself`, read in OnHide). Butler
+passes it from `UI:LeftVendor` and `LeftPlace` (`ButlerTabs:Closed(frame,
+byItself)`). Tested in `tools/test_sharedwindow.lua`. Docked or undocked while folded with the fold gem (2026-11-05, FILE_VERSION 6: a player found it squashed after unfolding), the sizes are worked from the size it opens back up to (`SharedWindow.FullSize`, FoldWindow's `state.width`/`state.full`), never the folded strip's, so it opens at the right size.
 
 Farmer's tabs have moved in (2026-10-30): the host is `FarmerTabs` in
 `UI/Main.lua` (`FarmerTabs.host`, given to `SharedWindow:Join`). With One
@@ -1244,7 +1350,11 @@ fade; Window effects Subtle or Off show the new order at once. The sound is
 whose fanfare plays instead. "Rank-up pop-up" (`rankUpPopup`) and "Rank-up
 sound" (`rankUpSound`), both on unless unticked, and `rankUpScale` (its size
 grip) are account wide; never rename them. `/farm rankup [on|off|sound
-on|off|show]`. Tested in `tools/test_rankup.lua`. Not yet seen in game.
+on|off|show|reset]`. It can be dragged anywhere (2026-11-06, the owner):
+its top left is kept in `rankUpX`/`rankUpY` (account wide, nil for its usual
+place beside the kills panel; never rename them, `RankUpUI:SavePlace`), and
+"Top 15 Position:" Set Default on the Kills page (`/farm rankup reset`,
+`ResetPlace`) puts it back. Tested in `tools/test_rankup.lua`. Not yet seen in game.
 
 ## Rankings outside dungeons only
 
@@ -1596,7 +1706,9 @@ shipped data's, the guild's or Classic's. Always on, no setting, never
 announced (no CHANGELOG, NEWS or What's New line). The player's own
 records are never touched; at 20 kills their own rates show. The search
 (where an item drops), Rankings' estimates, worth per kill "(est.)" and
-the other addons still read the shipped data. Tested in
+the other addons still read the shipped data. From 20 kills the loot
+table's rates also take the guild's corpses in (see "Sharing with the
+guild"), silently. Tested in
 `tools/test_killtooltip.lua` and `tools/test_guildshare.lua`.
 
 ## World drops
@@ -1647,7 +1759,17 @@ round that icon (`NodeSparkle.Icon`, the plate's `UnitFrame.SoftTargetFrame`,
 read only) when the plate lets us read it. So while "Sparkle on nodes" (`nodeSparkle`, on unless unticked, Map & goals
 page, `/farm sparkle`) is ticked Farmer raises them out of combat, keeping
 the old values in `nodeSparkleCVars` (never rename either) and putting them
-back when unticked. A node is a herb or vein the data knows, the client's
+back when unticked. A setting the player turns back after Farmer set it
+(the game's Interact Key unticked, a player's report, 2026-11-05) is
+theirs: the next `ApplySettings` (every loading screen) notes it in
+`nodeSparkleCVarsLeft` (never rename it) and never sets it again, and with
+the interact key off the nameplate setting goes back too; only ticking the
+sparkles box again clears it. `SoftTargetNameplateInteract` (`moves`) is
+never judged, since Farmer turns it down itself. When that plate was already on
+before Farmer came to it (2026-11-05, a player's NPCs kept a bar with
+friendly NPC nameplates off), its value is kept to put back too, and
+while the player shows no friendly NPC nameplates
+(`nameplateShowFriendlyNPCs`) `FitPlateToTarget` takes it off NPCs. A node is a herb or vein the data knows, the client's
 herb name, or a node the player gathered; a hidden source gets nothing.
 `/farm sparkle check` (`ns.KeepCheck`) reports what the client gives.
 Seen in game 2026-10-13 round the icon. Since then (the owner asked the
@@ -1707,6 +1829,11 @@ before (`skinLog`), until `GrindGather.skinned` has it
 its level (`Grinding.SkinSkill`); its plate stays on
 (`FitPlateToTarget`). Both rows sit under Sparkles on the Map & goals
 page. Not yet seen in game.
+"Bobber Beam:" under them (a player found the beam hid the bob, the owner
+said add it, 2026-11-07): `nodeSparkleBobber`, on unless unticked, account
+wide, never rename it; `/farm sparkle bobber [on|off]`. Unticked,
+`NodeSparkle:Kind` gives the bobber nothing, so no beam or sparkles;
+`IsBobber`, the reach and one key fishing are untouched.
 Tested in `tools/test_nodesparkle.lua`.
 
 ## Gathered spots on the maps
@@ -1735,6 +1862,17 @@ its spots is back; its hover says how many spots and `Respawn:GroupLines`
 (how many are back, when the next is). A pin is `farmerMarker`, and
 `Respawn:OnTooltipShown` adds no second grow-back line to its card. Tested
 in `tools/test_mapicons.lua`. Not yet seen in game.
+My Professions Only (Flau asked on Discord, the owner said it is the
+default, 2026-11-01: other characters' nodes are of no use): the world map
+and minimap markers show only herb, ore and fish spots for the gathering
+skills the character playing knows (`MapMarkers.MineOnly`, `ShownKinds`,
+`ReadKnown` from `GetProfessions` by skill line, else the skill lines;
+read again on `SKILL_LINES_CHANGED` or after `KNOWN_EVERY` seconds). When
+the client won't say, every spot shows. Nothing saved changes. "My
+Professions Only:" under the markers on the Map & goals page
+(`markersMyProfessions`, on unless unticked, account wide, never rename
+it) and `/farm markers mine [on|off]`. Tested in
+`tools/test_myprofessions.lua`. Not yet seen in game.
 
 ## Quest count over quest mobs
 
@@ -2310,3 +2448,60 @@ same.
 - **The client is WoW: Forever, a retail engine** (`## Interface: 16001`,
   modern Lua), not 1.12. Read client values inside a pcall; instances hand out
   secret values that raise when touched.
+
+## Fold in fresh data at each release
+
+Every release of this addon starts with a fold-in of fresh data from the
+live game (the owner, 2026-11-07), even when nothing else about the data
+changed: the release thread stages the owner's account save and the game's
+English caches, read only, from his live Forever folder (the path is in the
+project's release steps), runs the tools below, runs the tests and commits
+the data in the release PR as "Refresh shipped data". Never announced (no
+CHANGELOG, NEWS, What's New or post), never the save or caches committed,
+nothing else copied out of them. A release whose only change is new data
+does not ship on its own. If his PC can't be reached, the thread asks him
+once (Try again or Skip it); it never skips without saying. If the game
+patched since the client tables were last pulled, those are refreshed
+first.
+
+Farmer goes first, before Equipment or Pets ship, since their boss drops
+and beasts read `Data/Data_Harvested.lua`:
+
+- `tools/harvest_import.py --shared --sv <Blackthornes_Farmer.lua>`
+  (`Data/Data_Harvested.lua`, with the drops players sent in).
+- `tools/forever_npc_names.py <save> <creaturecache.wdb>`
+  (`Data/ForeverNpcNames.lua`).
+
+## Big files (read these in pieces)
+
+Reading a huge file whole fills the context and the thread dies. Sizes are
+from 2026-11-03 and only grow. Find more with `find . -name '*.lua' | xargs wc -lc | sort -n`.
+
+- Never read a file below whole. Use `grep -n` to find the spot, then read
+  about 150 lines at a time (Read with `offset` and `limit`).
+- Never read data tables or locale files whole. Grep them for one key.
+- CLAUDE.md is big too. Grep it for a heading, then read that part only.
+- Generated files (`Data/`) are written by their `tools/` script. Never edit
+  them by hand, and never open them to see what they hold.
+
+Data tables (generated, grep only):
+- `Data/Data_Harvested.lua` 8214 lines, 475 KB: shipped drop records.
+- `Data/Data_ClassicDrops.lua` 4611 lines, 470 KB: Classic drops for the search.
+- `Data/NpcNames.lua` 3365 lines, 115 KB and `Data/ForeverNpcNames.lua` 1215 lines, 39 KB: mob names by ID.
+
+Locale (grep one key, never read): `Locale/ruRU.lua` 1785 lines, 150 KB; `frFR`, `esES`, `deDE`, `zhCN` are each about 1780 lines, 115 to 120 KB.
+
+Code over 1500 lines:
+- `UI/Tracker.lua` 3557 lines, 137 KB: the Kills & Loot panel.
+- `UI/Widgets.lua` 2496 lines, 94 KB: shared widgets.
+- `Logic/Harvest.lua` 2345 lines, 92 KB: drop records.
+- `UI/Main.lua` 2119 lines, 79 KB: main window and its tabs.
+- `UI/Goals.lua` 2100 lines, 79 KB: goals panel.
+- `UI/Settings.lua` 1944 lines, 86 KB: Settings pages.
+- `Logic/Tracker.lua` 1824 lines, 72 KB: kill tally.
+- `UI/TrackerFX.lua` 1830 lines, 68 KB: panel effects.
+- `UI/Grinding.lua` 1743 lines, 71 KB: Grind tab.
+
+Over 800 lines or 30 KB, same rule: `UI/Rankings.lua`, `UI/Stats.lua`, `UI/XPBar.lua`, `UI/NodeSparkle.lua`, `UI/WhatsNew.lua`, `UI/MapMarkers.lua`, `UI/SharedWindow.lua`, `UI/LootTable.lua`, `UI/Heat.lua`, `UI/SettingsPages.lua`, `UI/FishingBar.lua`, `Logic/Share.lua`, `Logic/Arrow.lua`, `Logic/Search.lua`, `Logic/Gathering.lua`, `Logic/Stats.lua`, `Logic/Travel.lua`, `Logic/Value.lua`, `Logic/Fishing.lua`, `CHANGELOG.md` (1169 lines).
+
+The same file lives in several addons: `UI/SharedWindow.lua`, `UI/WhatsNew.lua`, `UI/SettingsPages.lua`, `Logic/Travel.lua`. A fix to one belongs in all.

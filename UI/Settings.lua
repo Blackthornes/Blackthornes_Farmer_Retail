@@ -268,7 +268,12 @@ function SettingsUI:ResetPositions()
     db.trackerGroupX = nil
     db.trackerGroupY = nil
 
-    if ns.UI and ns.UI.frame then ns.UI:RestorePosition() end
+    -- With the search window or Settings laid into the one window, they stay
+    -- there: placed on UIParent they came loose from its frame (a player's
+    -- report, 2026-10-31). The places above are forgotten all the same.
+    local hosted = ns.FarmerTabs and ns.FarmerTabs.Hosted and ns.FarmerTabs:Hosted()
+
+    if ns.UI and ns.UI.frame and not hosted then ns.UI:RestorePosition() end
 
     if ns.TrackerUI and ns.TrackerUI.frame and ns.TrackerUI.RestorePosition then
         ns.TrackerUI:RestorePosition()
@@ -285,7 +290,7 @@ function SettingsUI:ResetPositions()
     -- The goal arrow goes back to the top middle.
     if ns.ArrowUI then ns.ArrowUI:ResetPosition() end
 
-    self:RestorePosition()
+    if not hosted then self:RestorePosition() end
 end
 
 --------------------------------------------------------------------------------
@@ -333,13 +338,21 @@ end
 function SettingsUI:TakeWindowSize()
     local frame = self.frame
     if not frame then return end
+    -- What the pages asked for: laid into the one window the frame fills
+    -- the area, so its own size would only say how big the area is now.
+    local pages = rawget(self, "pages")
+    local need = pages and rawget(pages, "need")
+    if type(need) == "table" then
+        self.need = { need[1], need[2] }
+    else
+        self.need = { frame:GetWidth(), frame:GetHeight() }
+    end
     local Tabs = ns.FarmerTabs
     if Tabs and Tabs.area then
         -- Inside the one window it fills the area, which grows instead.
         Tabs:Grow()
         return
     end
-    self.need = { frame:GetWidth(), frame:GetHeight() }
     local width, height = SettingsUI.WindowSize()
     if not width then return end
     if frame:GetWidth() ~= width then
@@ -893,6 +906,10 @@ function SettingsUI:BuildTallyPage()
     local _, topButton = CommandRow(pages, "tally", 2, L["Top 15:"], nil, L["Show"], "rankup show")
     controls.rankUpShow = topButton
 
+    local _, topResetButton = CommandRow(pages, "tally", 2, L["Top 15 Position:"], nil,
+        L["Set Default"], "rankup reset")
+    controls.rankUpReset = topResetButton
+
     -- After an auction scan (Logic/TopFarm.lua, the owner asked 2026-10-14).
     local topFarmRow = pages:Row("tally", 2, L["After an Auction Scan:"],
         L["Your top 15 updates to the new prices after a scan. Only mobs you've killed 20 times count."])
@@ -1054,17 +1071,39 @@ function SettingsUI:BuildLootPage()
     controls.lootFeedReset = CommandButton(placeRow, L["Reset"], "lootfeed reset", 70, CONTROL_X + 76)
 
     -- Cast and Add Lure while a fishing pole is held (the owner said build
-    -- it 2026-10-26). The Retail TOC leaves the Fishing window out (Classic
-    -- lures on a main-hand pole), so the row shows only where it is loaded.
-    if ns.FishingBar then
+    -- it 2026-10-26), One Key Fishing and the Fishing Panel. The Retail TOC
+    -- leaves the fishing windows out (Classic lures on a main-hand pole), so
+    -- each row shows only where it is loaded.
+    if ns.FishingBar or ns.OneKeyFishing or ns.FishingPanel then
         pages:Section("loot", 1, L["FISHING"])
+    end
 
+    if ns.FishingBar then
         local fishBarRow = pages:Row("loot", 1, L["Fishing Buttons:"],
             L["Shows Cast and Add Lure while you hold a fishing pole."])
         controls.fishingBar = Widgets.CreateCheckbox(fishBarRow, L["On"], function(checked)
             ns.FishingBar:SetEnabled(checked)
         end, false)
         controls.fishingBar:SetPoint("TOPLEFT", CONTROL_X, -2)
+    end
+
+    -- One key to lure, cast and reel in (from Classic Era Farmer, 2026-10-31).
+    if ns.OneKeyFishing then
+        local oneKeyRow = pages:Row("loot", 1, L["One Key Fishing:"],
+            L["Press your Fish key to put on a lure, cast, and reel in. Set the key in the game's Key Bindings."])
+        controls.oneKeyFishing = Widgets.CreateCheckbox(oneKeyRow, L["On"], function(checked)
+            ns.OneKeyFishing:SetEnabled(checked)
+        end, false)
+        controls.oneKeyFishing:SetPoint("TOPLEFT", CONTROL_X, -2)
+    end
+
+    -- What you catch while you fish (a player asked, the owner said build it, 2026-11-02).
+    if ns.FishingPanel then
+        local fishPanelRow = pages:Row("loot", 1, L["Fishing Panel:"], nil)
+        controls.fishingPanel = Widgets.CreateCheckbox(fishPanelRow, L["On"], function(checked)
+            ns.FishingPanel:SetEnabled(checked)
+        end, false)
+        controls.fishingPanel:SetPoint("TOPLEFT", CONTROL_X, -2)
     end
 
     -- Drops only (a player asked, the owner agreed 2026-10-11).
@@ -1140,6 +1179,16 @@ function SettingsUI:BuildMapPage()
     end, true)
     controls.markersMinimap:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Only the spots this character's gathering skills can use (a player
+    -- asked, the owner said on by default, 2026-11-01).
+    local mineRow = pages:Row("map", 1, L["My Professions Only:"],
+        L["Shows only spots for the gathering skills this character knows."])
+
+    controls.markersMine = Widgets.CreateCheckbox(mineRow, L["On"], function(checked)
+        ns.MapMarkers:SetMineOnly(checked)
+    end, true)
+    controls.markersMine:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Sparkles on the node you face (the owner asked 2026-10-13).
     local sparkleRow = pages:Row("map", 1, L["Sparkles:"],
         L["Lights up the herb, ore, fishing school, chest, quest object or bobber in front of you."])
@@ -1177,6 +1226,14 @@ function SettingsUI:BuildMapPage()
         ns.NodeSparkle:SetCorpses(checked)
     end, true)
     controls.nodeSparkleCorpses:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- The bobber's own switch (a player found the beam hid the bob,
+    -- 2026-11-07).
+    local sparkleBobberRow = pages:Row("map", 1, L["Bobber Beam:"], nil)
+    controls.nodeSparkleBobber = Widgets.CreateCheckbox(sparkleBobberRow, L["On"], function(checked)
+        ns.NodeSparkle:SetBobber(checked)
+    end, true)
+    controls.nodeSparkleBobber:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- The game's interact icon, out of sight without a controller (the
     -- owner asked 2026-10-13).
@@ -1414,11 +1471,11 @@ function SettingsUI:BuildSharingPage()
 
     local _, giveButton = CommandRow(pages, "sharing", 1, L["Give My Data:"],
         L["Turns your counts into text you can send to another player."],
-        L["Make Text"], "give")
+        L["Export"], "give")
     controls.shareGive = giveButton
 
     local _, takeButton = CommandRow(pages, "sharing", 1, L["Take Their Data:"],
-        L["Paste what another player gave you. You'll see what it adds before anything changes."], L["Paste"], "take")
+        L["Paste what another player gave you. You'll see what it adds before anything changes."], L["Import"], "take")
     controls.shareTake = takeButton
 
     -- Logic/GuildShare.lua: the same with guildmates who use Farmer.
@@ -1570,6 +1627,7 @@ function SettingsUI:Refresh()
     if controls.shareDrops then controls.shareDrops:SetChecked(db.shareDrops == true) end
     controls.markersWorld:SetChecked(db.markersWorld ~= false)
     controls.markersMinimap:SetChecked(db.markersMinimap ~= false)
+    controls.markersMine:SetChecked(db.markersMyProfessions ~= false)
     controls.heatWorld:SetChecked(db.heatWorld == true)
     controls.heatMinimap:SetChecked(db.heatMinimap == true)
     controls.heatLevel:SetValue(ns.Heat:Level(), true)
@@ -1578,6 +1636,7 @@ function SettingsUI:Refresh()
     controls.nodeSparkleHideIcon:SetChecked(db.nodeSparkleHideIcon ~= false)
     controls.nodeSparkleColors:SetChecked(db.nodeSparkleColors ~= false)
     controls.nodeSparkleCorpses:SetChecked(db.nodeSparkleCorpses == true)
+    controls.nodeSparkleBobber:SetChecked(db.nodeSparkleBobber ~= false)
     for _, name in ipairs({ "itemTooltip", "killTooltip", "killTooltipDrops" }) do
         local stepper = controls[name]
         stepper:SetValue(ns.TooltipShift:Mode(stepper.isOn(), stepper.shiftKey), true)
@@ -1601,6 +1660,8 @@ function SettingsUI:Refresh()
     controls.openNote:SetChecked(db.openNote ~= false)
     controls.lootFeed:SetChecked(db.lootFeed == true)
     if controls.fishingBar then controls.fishingBar:SetChecked(db.fishingBar == true) end
+    if controls.oneKeyFishing then controls.oneKeyFishing:SetChecked(db.oneKeyFishing == true) end
+    if controls.fishingPanel then controls.fishingPanel:SetChecked(db.fishingPanel == true) end
     controls.lootFeedHold:SetValue(ns.LootFeed:Hold(), true)
     controls.lootFeedWorth:SetChecked(db.lootFeedWorth ~= false)
     controls.bagsFull:SetChecked(db.bagsFullNotice ~= false)

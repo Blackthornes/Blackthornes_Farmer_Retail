@@ -22,6 +22,12 @@
 --      letter while it shows and back beside the mailbox when it closes;
 --      watchers hear each dock, move and undock, and DockedFrame gives the
 --      window only while it is docked.
+--  10. Kept beside: while a game window is open, the window docks once the
+--      game shows its window late, and is placed beside it again when the
+--      game's window moves or this one changes width; nothing else moves it.
+--  11. Closed by the player while a game window is open, it stays closed
+--      when that window goes; only an addon's close on leaving (Close(true))
+--      lets it go back to the addon open before.
 
 local NAMES = { "CreateFrame", "UIParent", "C_Timer", "time", "BlackthornesWindow",
     "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum" }
@@ -228,9 +234,26 @@ SW.Open("gamma")
 SW.Open("alpha")
 SW.Arrived("vendor")
 assert(SW.Docked(), "docks when the event comes after")
-SW.Close()
+SW.Close(true)
 SW.Left("vendor")
 assert(SW.IsOpen() and BlackthornesWindow.current == c and not SW.Docked(), "reopens on the addon open before")
+
+-- 11. Up on gamma at the vendor, the player closes it (its close gem, or
+-- Escape, which closes the vendor too): it stays closed as the vendor goes.
+now = now + 5
+SW.Arrived("vendor")
+assert(SW.Docked(), "up on gamma, it docks at the vendor")
+frame:Hide()
+SW.Left("vendor")
+assert(not SW.IsOpen(), "closed by the player at the vendor, it stays closed")
+SW.Open("gamma")
+now = now + 5
+SW.Open("alpha")
+SW.Arrived("vendor")
+SW.Close()
+SW.Left("vendor")
+assert(not SW.IsOpen(), "closed without byItself, it stays closed")
+SW.Open("gamma")
 
 -- At the auction house too.
 AuctionHouseFrame = Object()
@@ -276,6 +299,33 @@ SW.Left("auction")
 assert(not SW.Docked() and frame:GetHeight() == height and frame.rail.shown == true, "its own size again")
 SW.Open("gamma")
 
+-- 10. Kept beside the auction house. The game shows its window late.
+AuctionHouseFrame.shown = false
+now = now + 5
+SW.Arrived("auction")
+SW.Open("tradeskills")
+assert(not SW.Docked(), "nothing to sit beside yet")
+assert(frame.watch and frame.watch.scripts.OnUpdate, "a watcher looks while shown")
+AuctionHouseFrame.shown = true
+frame.watch.wait = 0
+frame.watch.scripts.OnUpdate(frame.watch, 0.05)
+assert(SW.Docked() and frame.point[4] == 840 + SW.DOCK_GAP, "docks once the game's window shows")
+heard = 0
+assert(SW.Keep() == false and heard == 0, "nothing moved, nothing placed")
+frame.point = { "TOPLEFT", UIParent, "BOTTOMLEFT", 300, 720 }
+assert(SW.Keep() == false and frame.point[4] == 300, "dragged by hand, it stays")
+AuctionHouseFrame.right = 860
+assert(SW.Keep() and frame.point[4] == 860 + SW.DOCK_GAP and heard == 1, "the game's window moved: beside it again")
+frame.point = { "TOPLEFT", UIParent, "BOTTOMLEFT", 300, 720 }
+frame:SetWidth(frame:GetWidth() - 200)
+assert(SW.Keep() and frame.point[4] == 860 + SW.DOCK_GAP, "narrower: placed beside it again")
+frame:SetWidth(frame:GetWidth() + 200)
+AuctionHouseFrame.right = 840
+SW.Close()
+SW.Left("auction")
+assert(not SW.Docked() and SW.Keep() == false, "nothing to keep once it closes")
+SW.Open("gamma")
+
 -- 8. The interaction manager's hide undocks as the close event does.
 Enum = nil
 assert(SW.InteractionPlace(17) == "mail" and SW.InteractionPlace(5) == "vendor"
@@ -294,6 +344,36 @@ assert(not SW.Docked() and SW.Place() == nil, "the mailbox closing undocks")
 SW.events.scripts.OnEvent(SW.events, "MAIL_CLOSED")
 assert(not SW.Docked() and SW.IsOpen(), "the close event after it changes nothing")
 Enum = nil
+
+-- 11. Folded with the gem, it docks and undocks and opens back at its size.
+do
+    local fullW, fullH = frame:GetWidth(), frame:GetHeight()
+    local state = { folded = true, width = fullW, full = fullH }
+    rawset(frame, "blackthornesFold", state)
+    local setSize, setHeight = frame.SetSize, frame.SetHeight
+    -- What FoldWindow's hooks do: keep the size for the unfold, stay a strip.
+    frame.SetSize = function(self, w, h)
+        if state.folded then state.width, state.full = w, h; return setHeight(self, 38) end
+        return setSize(self, w, h)
+    end
+    frame.SetHeight = function(self, h)
+        if state.folded then state.full = h; return setHeight(self, 38) end
+        return setHeight(self, h)
+    end
+    setHeight(frame, 38)
+    now = now + 5
+    SW.Arrived("mail")
+    assert(SW.Docked() and state.width == fullW - SW.RAIL_WIDTH - 8 and state.full == fullH + SW.ROW_HEIGHT + 8,
+        "docked while folded, it keeps the docked size to open to")
+    assert(frame:GetHeight() == 38, "and stays folded")
+    SW.Left("mail")
+    assert(not SW.Docked() and state.width == fullW and state.full == fullH,
+        "undocked while folded, it opens back at its own size")
+    state.folded = false
+    frame.SetSize, frame.SetHeight = setSize, setHeight
+    rawset(frame, "blackthornesFold", nil)
+    frame:SetSize(fullW, fullH)
+end
 
 SW.SetOn(false)
 assert(not SW.IsOpen(), "unticking closes it")

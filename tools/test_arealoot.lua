@@ -41,7 +41,9 @@ end
 -- One window, three corpses: A targeted, B and C pulled in
 --------------------------------------------------------------------------------
 
-local A, B, C = "Creature-0-1-2-3-100-A", "Creature-0-1-2-3-100-B", "Creature-0-1-2-3-100-C"
+-- 999990 is an NPC ID no names list knows (Forever's names know 100), so
+-- Retail's area loot (Harvest:OtherCorpses) leaves the pulled-in corpses out.
+local A, B, C = "Creature-0-1-2-3-999990-A", "Creature-0-1-2-3-999990-B", "Creature-0-1-2-3-999990-C"
 local window = {
     { name = WOOL.name, id = WOOL.id, quantity = 6 },
     { name = LINEN.name, id = LINEN.id, quantity = 1 },
@@ -72,8 +74,8 @@ local rows = {}
 for _, line in ipairs(TUI.shown) do
     if line.item then rows[line.item] = line end
 end
-suite.check("the Loot tab says six wool", rows[WOOL.name] and rows[WOOL.name].right == "x6",
-    rows[WOOL.name] and rows[WOOL.name].right)
+suite.check("the Loot tab says six wool", rows[WOOL.name] and rows[WOOL.name].count == 6,
+    rows[WOOL.name] and rows[WOOL.name].count)
 suite.check("and lists the linen", rows[LINEN.name] ~= nil)
 TUI:SetTab("farm")
 
@@ -84,16 +86,16 @@ suite.check("the wool is not counted again", Tracker.sessionLoot[WOOL.name] == 6
 suite.check("nor the coin", Tracker.sessionCopper == 100, Tracker.sessionCopper)
 
 -- A window whose sources the client does not say: all of it is the kill's.
-Open("Creature-0-1-2-3-100-D", { { name = WOOL.name, id = WOOL.id, quantity = 3 } }, nil)
+Open("Creature-0-1-2-3-999990-D", { { name = WOOL.name, id = WOOL.id, quantity = 3 } }, nil)
 suite.check("without sources the kill takes the whole slot", Tally().qty[WOOL.name] == 5,
     Tally().qty[WOOL.name])
 suite.check("and the session counts it once", Tracker.sessionLoot[WOOL.name] == 9,
     Tracker.sessionLoot[WOOL.name])
 
 -- An unreadable quantity on another corpse's slot still counts one.
-Open("Creature-0-1-2-3-100-E",
+Open("Creature-0-1-2-3-999990-E",
     { { name = WOOL.name, id = WOOL.id, quantity = 1 }, { name = LINEN.name, id = LINEN.id, quantity = env.Secret("quantity") } },
-    { { "Creature-0-1-2-3-100-E", 1 }, { "Creature-0-1-2-3-100-F", 2 } })
+    { { "Creature-0-1-2-3-999990-E", 1 }, { "Creature-0-1-2-3-999990-F", 2 } })
 suite.check("an unreadable amount counts as one", Tracker.sessionLoot[LINEN.name] == 2,
     Tracker.sessionLoot[LINEN.name])
 
@@ -110,7 +112,7 @@ _G.GetLootSlotInfo = function(slot)
 end
 
 local woolBefore = Tracker.sessionLoot[WOOL.name]
-Open("Creature-0-1-2-3-100-G", {
+Open("Creature-0-1-2-3-999990-G", {
     { name = FANG.name, id = FANG.id, locked = true },
     { name = WOOL.name, id = WOOL.id, quantity = 2 },
 }, nil)
@@ -125,16 +127,16 @@ suite.check("so the value leaves the fang out", ns.Value:Session()
     ns.Value:Session())
 
 -- Locked on another corpse in an area loot: not yours either.
-Open("Creature-0-1-2-3-100-H", {
+Open("Creature-0-1-2-3-999990-H", {
     { name = WOOL.name, id = WOOL.id, quantity = 1 },
     { name = FANG.name, id = FANG.id, locked = true },
-}, { { "Creature-0-1-2-3-100-H", 1 }, { "Creature-0-1-2-3-100-I", 1 } })
+}, { { "Creature-0-1-2-3-999990-H", 1 }, { "Creature-0-1-2-3-999990-I", 1 } })
 suite.check("another corpse's locked drop stays out", Tracker.sessionLoot[FANG.name] == nil,
     Tracker.sessionLoot[FANG.name])
 
 -- A locked answer the client will not let us read counts as not locked.
 local fangsBefore = Tally().items[FANG.name]
-local ok = pcall(Open, "Creature-0-1-2-3-100-J", { { name = FANG.name, id = FANG.id, locked = env.Secret("locked") } }, nil)
+local ok = pcall(Open, "Creature-0-1-2-3-999990-J", { { name = FANG.name, id = FANG.id, locked = env.Secret("locked") } }, nil)
 suite.check("an unreadable lock does not stop the kill", ok and Tally().items[FANG.name] == fangsBefore + 1)
 suite.check("and counts as yours", Tracker.sessionLoot[FANG.name] == 1, Tracker.sessionLoot[FANG.name])
 

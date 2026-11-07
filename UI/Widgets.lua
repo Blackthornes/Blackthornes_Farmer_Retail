@@ -614,11 +614,23 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
         end
     end
 
+    -- The menu opens on UIParent at the box's own scale, so a window
+    -- that scrolls (Settings) never cuts it off at its edge.
+    local function Lift()
+        pcall(function()
+            if menu:GetParent() ~= UIParent then menu:SetParent(UIParent) end
+            local mine, screen = dropdown:GetEffectiveScale(), UIParent:GetEffectiveScale()
+            if mine and screen and screen > 0 then menu:SetScale(mine / screen) end
+        end)
+    end
+    dropdown:HookScript("OnHide", function() menu:Hide() end)
+
     function dropdown:Toggle()
         if menu:IsShown() then
             menu:Hide()
             return
         end
+        Lift()
         -- A long menu opens with the choice in view, near its middle.
         menu.first = 1
         for index, option in ipairs(self.options) do
@@ -629,6 +641,9 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
         end
         Rebuild()
         Place()
+        -- A window that sets its own strata (One Window does) takes the
+        -- menu down with it, so lift it back on top each time it opens.
+        menu:SetFrameStrata("FULLSCREEN_DIALOG")
         menu:Show()
         menu:Raise()
         Motion:Run(menu, "open", 0.12, function(p) menu:SetAlpha(p) end)

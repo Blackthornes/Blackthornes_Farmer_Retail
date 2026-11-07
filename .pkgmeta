@@ -53,6 +53,11 @@ ignore:
   - Logic/GatherToCap.lua
   - UI/GatherToCap.lua
   - UI/FishingBar.lua
+  - UI/FishingPanel.lua
+  - UI/OneKeyFishing.lua
+  # One Key Fishing's key; the game reads it by itself, and Retail leaves
+  # One Key Fishing out.
+  - Bindings.xml
 
 license-output: LICENSE
 

@@ -95,7 +95,7 @@ env.Stub = Stub
 function env.InstallClient()
     env.chat = {}
 
-    _G.UIParent = Stub()
+    _G.UIParent = Stub({ _height = 2160 })
     -- The arrows' shared table (one Blackthornes arrow at a time) would
     -- carry one suite's arrow into the next.
     _G.BlackthornesArrows = nil
@@ -364,6 +364,7 @@ local FILES = {
     "Logic/Travel.lua",
     "Logic/Grinding.lua",
     "Logic/GrindGather.lua",
+    "Logic/CampWorth.lua",
     "Logic/GatherToCap.lua",
     "Logic/RoadToMax.lua",
     "Logic/Share.lua",
@@ -381,6 +382,8 @@ local HARVESTED = "Data/Data_Harvested.lua"
 
 local UI_FILES = {
     "UI/Theme.lua",
+    "UI/ItemLook.lua",
+    "UI/Coins.lua",
     "UI/BlizzardLook.lua",
     "UI/Widgets.lua",
     "UI/SpotMarker.lua",
@@ -436,6 +439,8 @@ local UI_FILES = {
     "UI/Veil.lua",
     "UI/XPBar.lua",
     "UI/FishingBar.lua",
+    "UI/FishingPanel.lua",
+    "UI/OneKeyFishing.lua",
     "UI/Settings.lua",
 }
 
@@ -470,6 +475,8 @@ env.RETAIL_LEFT_OUT = {
     ["Logic/GatherToCap.lua"] = true,
     ["UI/GatherToCap.lua"] = true,
     ["UI/FishingBar.lua"] = true,
+    ["UI/FishingPanel.lua"] = true,
+    ["UI/OneKeyFishing.lua"] = true,
 }
 
 --- Retail's own files, in place of Gather to cap: loaded only with

@@ -2289,7 +2289,8 @@ function TrackerUI:LootLines(Add)
         local sub, short = SourcesText(entry.sources)
         Add({ style = "loot", item = entry.name, left = entry.name,
             sub = sub, subShort = short, rank = rank,
-            right = ("x%d"):format(entry.count),
+            -- The count sits on the icon's corner (UI/ItemLook.lua).
+            right = (not ns.ItemLook) and ("x%d"):format(entry.count) or nil,
             below = entry.value and ns.Value.Coins(entry.value)
                 or (entry.quest and L["Quest"] or L["no price"]),
             belowColor = entry.value and "good" or (entry.quest and "accent" or "muted"),
@@ -2403,6 +2404,11 @@ function TrackerUI:DrawLine(row, line)
     row.icon:ClearAllPoints()
     row.icon:SetPoint("LEFT", PADDING + 6, 0)
     row.icon:SetSize(ICON, ICON)
+    -- The quality ring and corner count are only for the Loot tab's rows.
+    if ns.ItemLook then
+        ns.ItemLook.SetQuality(row.icon, nil)
+        ns.ItemLook.SetCount(row.icon, nil)
+    end
 
     if line.style == "item" then
         local look = ns.Tracker:LookOf(line.item)
@@ -2607,8 +2613,14 @@ function TrackerUI:DrawLootParts(row, line)
 
     row.left:SetTextColor(ItemColor(line.item))
 
-    -- Green and better glow in their own colour.
+    -- The quality ring round the icon and the count in its corner.
     local quality = ns.TrackerFX and ns.TrackerFX.QualityOf(line.item) or nil
+    if ns.ItemLook then
+        ns.ItemLook.SetQuality(row.icon, quality)
+        ns.ItemLook.SetCount(row.icon, line.count)
+    end
+
+    -- Green and better glow in their own colour.
     if quality and quality >= 2 then
         local r, g, b = ItemColor(line.item)
         row.live:SetColorTexture(1, 1, 1, 1)
@@ -3241,8 +3253,22 @@ ns.Util.OnRarity("tracker", function()
 end)
 
 --- Redraw, and show or hide to match the saved setting.
-function TrackerUI:Refresh()
+--- Inside a loot window's read (ns.readingLoot) the redraw waits for the
+--- next frame, and every call until then shares it: pricing a long
+--- session's loot inside the loot event ran past the game's time limit
+--- ("script ran too long", 2026-11-02).
+function TrackerUI:Refresh(now)
     self:Build()
+
+    if not now and ns.readingLoot and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+        if self.refreshSoon then return end
+        self.refreshSoon = true
+        C_Timer.After(0, function()
+            self.refreshSoon = nil
+            self:Refresh(true)
+        end)
+        return
+    end
 
     -- An open loot table follows the same tally.
     if ns.LootTableUI then ns.LootTableUI:Refresh() end

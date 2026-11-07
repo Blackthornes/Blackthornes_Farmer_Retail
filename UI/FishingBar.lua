@@ -75,6 +75,15 @@ local PLACES = {
     AUCTION_HOUSE_SHOW = "AUCTION_HOUSE_CLOSED",
     TRADE_SHOW = "TRADE_CLOSED",
 }
+-- The game's window for each, read only: a close the client never said
+-- (walking away from a mailbox) left the window hidden until a /reload.
+local PLACE_FRAMES = {
+    MERCHANT_SHOW = { "MerchantFrame" },
+    BANKFRAME_OPENED = { "BankFrame" },
+    MAIL_SHOW = { "MailFrame" },
+    AUCTION_HOUSE_SHOW = { "AuctionHouseFrame", "AuctionFrame" },
+    TRADE_SHOW = { "TradeFrame" },
+}
 FishingBar.at = {}
 -- The skill each lure needs, as its tooltip says: [itemID] = number, or
 -- false when it needs none.
@@ -267,6 +276,27 @@ function FishingBar:SetEnabled(on)
     self:Update()
 end
 
+--- Is the game's window for a place still up? Nil when it has none to read.
+function FishingBar.PlaceShown(open)
+    local found
+    for _, name in ipairs(PLACE_FRAMES[open] or {}) do
+        local frame = rawget(_G, name)
+        if type(frame) == "table" and type(frame.IsShown) == "function" then
+            local ok, shown = pcall(frame.IsShown, frame)
+            if ok and shown then return true end
+            if ok then found = false end
+        end
+    end
+    return found
+end
+
+--- Let go of a place whose window has closed without saying so.
+function FishingBar:ForgetClosedPlaces()
+    for open in pairs(self.at) do
+        if self.PlaceShown(open) == false then self.at[open] = nil end
+    end
+end
+
 function FishingBar.Busy()
     for _, open in pairs(FishingBar.at) do
         if open then return true end
@@ -398,6 +428,7 @@ function FishingBar:Build()
     end
 
     self:Place()
+    self:FitButtons()
     return frame
 end
 
@@ -420,8 +451,11 @@ function FishingBar:FitButtons()
         value:SetPoint("TOPRIGHT", -PAD, -94 - grow)
         value:SetPoint("LEFT", label, "RIGHT", 6, 0)
     end
+    -- The fishing panel's strip sits under the Lure: line while it is on.
+    local strip = ns.FishingPanel and ns.FishingPanel:StripHeight() or 0
     local folded = ns.FoldWindow and ns.FoldWindow:IsFolded(frame)
-    if not folded then frame:SetHeight(self.HEIGHT + grow) end
+    if ns.FishingPanel and not folded then ns.FishingPanel:PlaceStrip(frame, -114 - grow) end
+    if not folded then frame:SetHeight(self.HEIGHT + grow + strip) end
 end
 
 --- Put it where it was left, else in its first place.
@@ -634,7 +668,9 @@ function FishingBar:DrawLines()
     self:Glow(glow)
     local best = lures[1]
     local button = self.lureButton
-    button:SetIcon(best and ItemIcon(best.id) or 134400)
+    -- With none in the bags it wears a lure's look, dimmed, never a "?".
+    local looks = FishingBar.LURES[#FishingBar.LURES]
+    button:SetIcon(ItemIcon(best and best.id or looks.id))
     button:SetLines(L["Add Lure"], best and L.Format("%s, %d left", best.name, best.count) or nil)
     button:SetAlpha(#lures == 0 and 0.55 or 1)
 
@@ -686,6 +722,7 @@ end
 --- Show or hide it for how things stand, and draw what shows.
 function FishingBar:Update()
     if self.fighting or InCombat() then return end
+    self:ForgetClosedPlaces()
     local holds = self.HoldsPole()
     -- Taking the pole off lets the close gem's choice go.
     if not holds then self.closed = nil end
@@ -702,6 +739,7 @@ function FishingBar:Update()
     if not frame:IsShown() then frame:Show() end
     self:DrawLines()
     self:DrawList()
+    self:FitButtons()
 end
 
 --- Bag, gear and skill events come in bursts: one read after they settle.
@@ -710,6 +748,8 @@ function FishingBar:Changed()
     self.pending = true
     C_Timer.After(self.SETTLE, function()
         FishingBar.pending = nil
+        -- A fight's end the client never said leaves no lock behind.
+        if not InCombat() then FishingBar.fighting = false end
         FishingBar:Update()
     end)
 end
@@ -727,6 +767,8 @@ function FishingBar:OnEnable()
     end)
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Changed)
     ns.RegisterEvent(self, "SKILL_LINES_CHANGED", Changed)
+    -- Walking away from a mailbox or shop; nothing on a client without it.
+    ns.RegisterEvent(self, "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", Changed)
 
     -- Just before combat locks secure frames: hidden while it still may be.
     ns.RegisterEvent(self, "PLAYER_REGEN_DISABLED", function()
