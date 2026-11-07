@@ -5,18 +5,18 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.48.0", lines = {
+        "The Grind tab shows what each camp earns you an hour. A new Best Worth sort puts the best camps on top.",
+        "Map markers show only the herbs, ore and fish spots your character can gather. You can turn this off under Markers in Settings.",
+        "Item icons have quality rings and counts in the corner.",
+        "You can drag the Top 15 window where you want it. Set Default in Settings, on the Kills page, puts it back.",
+        "Drop rates on a mob's loot table count your guild's kills too, once you've killed that mob 20 times yourself. Guild sharing has to be on.",
+        "You can turn off the beam over your fishing bobber if it hides the bob. It is in Settings, on the Map & goals page, under Sparkles.",
+    } },
     { version = "0.47.2", lines = {
         "This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.",
     } },
     { version = "0.47.1", lines = {
         "This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.",
-    } },
-    { version = "0.47.0", lines = {
-        "This is an early build, so you may run into bugs. Please report them on our Discord, in the bug channel, with the Retail and Farmer tags.",
-        "The Ore, Herbs and Leather views on the Grind tab show your whole road from level 1 to the max, one expansion at a time, from Classic to Midnight. Your skill shows in each one, and Farmer tells you about how many more gathers you need.",
-        "Map pins show the icon of the item that spot gave you most. A pin stays grey until the spot has grown back.",
-        "Fishing spots are marked on your map too.",
-        "Nodes that are close together join into one pin. On the world map, pins that sit on top of each other join into one pin with a count.",
-        "The gold arrow moves on to the next spot when you reach a node that isn't up yet.",
     } },
 }

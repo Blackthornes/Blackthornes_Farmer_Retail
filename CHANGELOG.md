@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.48.0
+
+For WoW Retail (interface 120105). A full restart is needed after updating.
+
+- The Grind tab shows what each camp earns you an hour. A new Best Worth sort puts the best camps on top.
+- Map markers show only the herbs, ore and fish spots your character can gather. You can turn this off under Markers in Settings.
+- Item icons have quality rings and counts in the corner.
+- You can drag the Top 15 window where you want it. Set Default in Settings, on the Kills page, puts it back.
+- Drop rates on a mob's loot table count your guild's kills too, once you've killed that mob 20 times yourself. Guild sharing has to be on.
+- You can turn off the beam over your fishing bobber if it hides the bob. It is in Settings, on the Map & goals page, under Sparkles.
+
+Fixes and changes:
+
+- Various bug fixes.
+
 ## 0.47.3
 
 For WoW Retail (interface 120105).
