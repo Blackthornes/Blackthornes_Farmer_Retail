@@ -8,7 +8,9 @@
 -- "Sparkle Colors" is unticked (`nodeSparkleColors`, on unless unticked;
 -- never rename it). "Skinnable Corpses" (`nodeSparkleCorpses`, off unless
 -- ticked; never rename it) sparkles a dead beast you could skin, in your
--- Skinning's colour, until you skin it.
+-- Skinning's colour, until you skin it. "Bobber Beam" (`nodeSparkleBobber`,
+-- on unless unticked; never rename it) is the bobber's own switch, since a
+-- player found the beam hid the bob (2026-11-07).
 --
 -- The game tells addons nothing about the nodes around you: not where they
 -- are, not where they sit on screen. The one it does name is the node the
@@ -28,6 +30,10 @@
 -- round (SoftTargetInteractRange, SoftTargetInteractArc), keeping what each was in
 -- `nodeSparkleCVars` (never rename it) and putting them back when the box
 -- is unticked. Nothing is set that the player had already set that way.
+-- A setting the player turns back themselves after Farmer set it (the
+-- game's Interact Key unticked, a player's report, 2026-11-05) is theirs:
+-- Farmer notes it in `nodeSparkleCVarsLeft` (never rename it) and never sets
+-- it again, until the player ticks the sparkles box again.
 --
 -- A node is a herb or ore the data knows (a herb's own name, a vein's
 -- source name), the client's name for that herb, or any node the player
@@ -73,7 +79,10 @@ local UNIT = "softinteract"
 -- The game settings Farmer turns on, and to what.
 NodeSparkle.CVARS = {
     { name = "SoftTargetInteract", value = "3", atLeast = 3 },
-    { name = "SoftTargetNameplateInteract", value = "1", atLeast = 1 },
+    -- `moves`: Farmer turns this one back and forth itself as you face
+    -- creatures and objects (FitPlateToTarget), so a low value is no sign
+    -- the player changed it.
+    { name = "SoftTargetNameplateInteract", value = "1", atLeast = 1, moves = true },
     -- How far the interact target looks, in yards (the game's own is about
     -- 10), and how wide: 2 is all the way round you, 1 only in front. The
     -- owner asked 2026-10-13 for 30, then 100, then back to 15 once he saw
@@ -199,8 +208,18 @@ local function Saved()
     return db.nodeSparkleCVars
 end
 
+-- Settings the player turned back after Farmer set them: Farmer leaves
+-- them as they are from then on.
+local function Left()
+    local db = ns.db
+    if type(db.nodeSparkleCVarsLeft) ~= "table" then db.nodeSparkleCVarsLeft = {} end
+    return db.nodeSparkleCVarsLeft
+end
+
 --- Turn on the game settings the sparkle needs, keeping what each was.
---- Out of combat only; in a fight it waits for the fight to end.
+--- Out of combat only; in a fight it waits for the fight to end. A setting
+--- Farmer turned on that is now lower again was turned back by the
+--- player: it is left as they have it, now and later.
 function NodeSparkle:ApplySettings()
     if not ns.db or not self:IsEnabled() then return false end
     if InCombat() then
@@ -209,16 +228,33 @@ function NodeSparkle:ApplySettings()
     end
     self.applyAfterCombat = nil
 
-    local saved = Saved()
+    local saved, left = Saved(), Left()
     for _, cvar in ipairs(self.CVARS) do
-        local now = self.GetCVar(cvar.name)
-        if now ~= nil and (tonumber(now) or 0) < cvar.atLeast then
-            if saved[cvar.name] == nil then saved[cvar.name] = now end
-            self.SetCVar(cvar.name, cvar.value)
+        local name = cvar.name
+        local now = self.GetCVar(name)
+        local low = now ~= nil and (tonumber(now) or 0) < cvar.atLeast
+        if left[name] then
+            -- The player's choice: never set again.
+        elseif low and saved[name] ~= nil and not cvar.moves then
+            left[name] = true
+            saved[name] = nil
+        elseif low then
+            if saved[name] == nil then saved[name] = now end
+            self.SetCVar(name, cvar.value)
+        elseif now ~= nil and cvar.moves and saved[name] == nil then
+            -- Already on before Farmer came to it: keep the player's value
+            -- to put back, so FitPlateToTarget may take the plate off NPCs.
+            saved[name] = now
+        elseif now ~= nil and cvar.lower and saved[name] ~= nil and (tonumber(now) or 0) > cvar.atLeast then
+            -- Farmer set it higher before: bring it to what it sets now.
+            self.SetCVar(name, cvar.value)
         end
-        -- Farmer set it higher before: bring it to what it sets now.
-        if now ~= nil and cvar.lower and saved[cvar.name] ~= nil and (tonumber(now) or 0) > cvar.atLeast then
-            self.SetCVar(cvar.name, cvar.value)
+    end
+    -- With the interact key turned off by the player, its nameplate is no
+    -- use: put it back as they had it too.
+    if left.SoftTargetInteract and saved.SoftTargetNameplateInteract ~= nil then
+        if self.SetCVar("SoftTargetNameplateInteract", saved.SoftTargetNameplateInteract) then
+            saved.SoftTargetNameplateInteract = nil
         end
     end
     return true
@@ -245,6 +281,8 @@ function NodeSparkle:SetEnabled(on)
     ns.db.nodeSparkle = on and true or false
     if on then
         self.restoreAfterCombat = nil
+        -- Ticked again: the player asks for the settings once more.
+        ns.db.nodeSparkleCVarsLeft = nil
         self:ApplySettings()
         self:Refresh()
     else
@@ -272,9 +310,10 @@ function NodeSparkle.IsFishingCast(spellID)
 end
 
 --- Let the interact target reach as far as a cast lands. Only out of a
---- fight, only when it reaches less now, and what it was is kept.
-function NodeSparkle:RaiseReach()
-    if not ns.db or not self:IsEnabled() or InCombat() then return false end
+--- fight, only when it reaches less now, and what it was is kept. `force`
+--- raises it with the sparkles off too (One Key Fishing's reel in).
+function NodeSparkle:RaiseReach(force)
+    if not ns.db or not (force or self:IsEnabled()) or InCombat() then return false end
     local now = self.GetCVar("SoftTargetInteractRange")
     if now == nil or (tonumber(now) or 0) >= self.FISHING_RANGE then return false end
     if ns.db.nodeSparkleFishingRange == nil then ns.db.nodeSparkleFishingRange = now end
@@ -385,12 +424,54 @@ function NodeSparkle:Names()
     return set
 end
 
+-- Forever puts a word in front of some nodes ("Wilted Peacebloom",
+-- "Stunted Silverleaf", a player's report 2026-11-05). Such a name counts
+-- as the node it ends with, so it sparkles and takes that node's skill.
+NodeSparkle.MAX_LEADING_WORDS = 3
+local bases, basesKey = {}, nil
+
+--- The node a name stands for, in lower case: the name itself when Farmer
+--- knows it, else the known node it ends with once up to
+--- MAX_LEADING_WORDS words come off the front. Nil when neither.
+function NodeSparkle:BaseKey(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    local set = self:Names()
+    if basesKey ~= namesKey then bases, basesKey = {}, namesKey end
+    local lower = name:lower()
+    local kept = bases[lower]
+    if kept ~= nil then return kept or nil end
+    local found = set[lower] and lower or nil
+    local rest = lower
+    for _ = 1, self.MAX_LEADING_WORDS do
+        if found then break end
+        local after = rest:match("^%S+%s+(.+)$")
+        if not after then break end
+        rest = after
+        if set[rest] then found = rest end
+    end
+    bases[lower] = found or false
+    return found
+end
+
 --- The skill a node needs, as "Mining", 65, or nil when the data does not
 --- say (a node only the player has gathered).
 function NodeSparkle:NodeNeeds(name)
     if type(name) ~= "string" or name == "" then return nil end
     self:Names()
-    local entry = needs and needs[name:lower()]
+    local lower = name:lower()
+    local entry = needs and needs[lower]
+    if not entry then
+        -- A gathered "Wilted Peacebloom" is known by name but not its need:
+        -- take the need of the node it ends with.
+        local rest = lower
+        for _ = 1, self.MAX_LEADING_WORDS do
+            local after = rest:match("^%S+%s+(.+)$")
+            if not after then break end
+            rest = after
+            entry = needs and needs[rest]
+            if entry then break end
+        end
+    end
     if not entry then return nil end
     return entry.skill, entry.need
 end
@@ -536,9 +617,17 @@ function NodeSparkle:Kind(name, guid)
     if guid and self:TooltipGathers(guid) then return "node" end
     if ns.Fishing and ns.Fishing.IsSchool and ns.Fishing.IsSchool(name) then return "school" end
     if self.IsChest(name) then return "chest" end
-    if self:IsBobber(name) then return "bobber" end
+    if self:IsBobber(name) then
+        if not self:BobberOn() then return nil end
+        return "bobber"
+    end
     if self:IsQuestObject(name) then return "quest" end
     return nil
+end
+
+--- Whether the bobber gets its beam or sparkles (on unless unticked).
+function NodeSparkle:BobberOn()
+    return not (ns.db and ns.db.nodeSparkleBobber == false)
 end
 
 function NodeSparkle:IsBobber(name)
@@ -554,8 +643,9 @@ end
 
 function NodeSparkle:IsNode(name)
     if type(name) ~= "string" or name == "" then return false end
-    if not self:Names()[name:lower()] then return false end
-    if ns.DB and ns.DB:IsHiddenSource(name) then return false end
+    local key = self:BaseKey(name)
+    if not key then return false end
+    if ns.DB and (ns.DB:IsHiddenSource(name) or ns.DB:IsHiddenSource(self:Names()[key])) then return false end
     return true
 end
 
@@ -1175,7 +1265,14 @@ function NodeSparkle:FitPlateToTarget()
     local guid, name, object = self:Facing()
     -- A corpse to skin keeps the plate: the sparkle hangs on it.
     local creature = guid and not object and not self:SkinnableCorpse(guid, name)
-    local want = creature and own or "1"
+    -- Facing an NPC, the plate goes back to the player's own value; when
+    -- that was already on but they show no friendly NPC nameplates, it goes
+    -- off, so an NPC gets no bar only Farmer's setting asked for.
+    local onCreature = own
+    if (tonumber(own) or 0) >= 1 and self.GetCVar("nameplateShowFriendlyNPCs") ~= "1" then
+        onCreature = "0"
+    end
+    local want = creature and onCreature or "1"
     if self.GetCVar("SoftTargetNameplateInteract") ~= want then
         self.SetCVar("SoftTargetNameplateInteract", want)
     end
@@ -1270,6 +1367,12 @@ function NodeSparkle:Check()
             ns.PrintRaw(("  kept to put back: %s = %s"):format(name, tostring(value)))
         end
     end
+    local left = ns.db and ns.db.nodeSparkleCVarsLeft
+    if type(left) == "table" then
+        for name in pairs(left) do
+            ns.PrintRaw(("  left as the player set it: %s"):format(name))
+        end
+    end
     ns.PrintRaw(("  fishing: %s, reach raised from: %s"):format(self.fishing and "yes" or "no",
         tostring(ns.db and ns.db.nodeSparkleFishingRange or "-")))
     ns.PrintRaw(("  C_NamePlate.GetNamePlateForUnit: %s"):format(
@@ -1321,12 +1424,17 @@ function NodeSparkle:SetCorpses(on)
     self:SafeRefresh()
 end
 
+function NodeSparkle:SetBobber(on)
+    ns.db.nodeSparkleBobber = on and true or false
+    self:SafeRefresh()
+end
+
 --- A corpse was just skinned: its sparkle goes.
 function NodeSparkle:Skinned(guid)
     if guid and self.shownGuid == guid then self:SafeRefresh() end
 end
 
-ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, chest or quest object you face (beacon, sparkles, colors, corpses, icon, check)"], function(rest)
+ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, chest or quest object you face (beacon, sparkles, colors, corpses, bobber, icon, check)"], function(rest)
     local argument = ns.Util.Trim(rest or ""):lower()
     local word, value = argument:match("^(%a+)%s*(%a*)$")
     if word == "colors" or word == "colours" then
@@ -1346,6 +1454,16 @@ ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, c
         else on = not NodeSparkle:CorpsesOn() end
         NodeSparkle:SetCorpses(on)
         ns.Print(on and L["corpses you can skin sparkle."] or L["corpses don't sparkle."])
+        if ns.SettingsUI then ns.SettingsUI:Refresh() end
+        return
+    end
+    if word == "bobber" then
+        local on
+        if value == "on" then on = true
+        elseif value == "off" then on = false
+        else on = not NodeSparkle:BobberOn() end
+        NodeSparkle:SetBobber(on)
+        ns.Print(on and L["your bobber lights up."] or L["your bobber stays plain."])
         if ns.SettingsUI then ns.SettingsUI:Refresh() end
         return
     end

@@ -38,6 +38,7 @@ end
 local KEPT = {
     { Share, "partners" }, { GuildShare, "byId" }, { GuildShare, "bySender" }, { GuildShare, "queue" },
     { GuildShare, "current" }, { GuildShare, "helloAt" }, { GuildShare, "answerAt" },
+    { GuildShare, "answerPending" }, { GuildShare, "sentAt" },
     { GuildShare, "building" }, { GuildShare, "ticker" }, { GuildShare, "me" },
     { GuildShare, "shown" }, { GuildShare, "publishing" }, { GuildShare, "publishAgain" },
     { GuildShare, "publishQueued" },
@@ -103,6 +104,7 @@ _G.C_Timer = {
 }
 
 local guildSent = 0
+local guildKinds = {}   -- kind -> how many went to the guild
 
 --- Let time pass until everything is quiet. A guild message reaches every
 --- other account online; a whisper only its target, if online.
@@ -129,6 +131,8 @@ local function Settle()
         for _, message in ipairs(mail) do
             if message.channel == "GUILD" then
                 guildSent = guildSent + 1
+                local kind = message.text:sub(1, 1)
+                guildKinds[kind] = (guildKinds[kind] or 0) + 1
                 for _, to in ipairs(accounts) do
                     if to.online and to ~= message.from then
                         Switch(to)
@@ -200,6 +204,10 @@ Check("on, it listens", Comm.listening == true)
 Switch(bob) GuildShare:SetOn(true)
 Settle()
 
+Check("a copy that just loaded says hello and that it is fresh", (guildKinds.G or 0) >= 2 and (guildKinds.N or 0) >= 2,
+    tostring(guildKinds.G) .. " G, " .. tostring(guildKinds.N) .. " N")
+local freshHellos = guildKinds.N
+
 Switch(ana)
 Check("Ana has Bob's corpses, kept apart", Guild(ana) and Guild(ana).corpses == 20, Guild(ana) and Guild(ana).corpses)
 Check("and his drops", Guild(ana).items["Wolf Pelt"].count == 5, Guild(ana).items["Wolf Pelt"].count)
@@ -240,6 +248,7 @@ HalfHour()
 HalfHour()
 Check("syncing again counts nothing twice", Guild(ana).corpses == 20 and Guild(bob).corpses == 30
     and ana.records[WOLF].corpses == 30 and bob.records[WOLF].corpses == 20)
+Check("the quarter hour hello does not say fresh", guildKinds.N == freshHellos, guildKinds.N)
 
 -- New kills reach the other side once.
 ana.db.tracker.mobs.Wolf.kills = ana.db.tracker.mobs.Wolf.kills + 5
@@ -281,11 +290,59 @@ Check("a hello that was not on the guild channel is ignored", GuildShare.byId["a
 GuildShare:OnHello("Eve Smith", "not an id:zz", "GUILD")
 Check("a hello that does not read is ignored", GuildShare.bySender["eve smith"] == nil)
 
+-- A guildmate already known who was quiet a while has reloaded and no
+-- longer knows this side: their hello is answered, not only a new one's.
+-- One that says it just loaded is answered whatever was heard before.
+do
+    local state = GuildShare.bySender["cid smith"]
+    local hello = state.id .. ":" .. (state.top or "zz")
+    local anaHello = GuildShare.bySender["ann smith"].id .. ":zz"
+    GuildShare.answerAt, GuildShare.helloAt, GuildShare.answerPending, GuildShare.sentAt = nil, nil, nil, nil
+    state.heardAt = time() - 10
+    GuildShare:OnHello("Cid Smith", hello, "GUILD")
+    Check("a guildmate heard a moment ago is not answered again", not GuildShare.answerPending)
+    state.heardAt = time() - GuildShare.QUIET_ANSWER - 1
+    GuildShare:OnHello("Cid Smith", hello, "GUILD")
+    Check("one quiet for a while is answered", GuildShare.answerPending == true)
+    GuildShare.answerPending = nil
+    state.online = false
+    GuildShare:OnHello("Cid Smith", hello, "GUILD")
+    Check("and so is one back online", GuildShare.answerPending == true)
+    GuildShare.answerPending = nil
+    -- Our own hello went out a moment ago, so theirs is the answer to it.
+    GuildShare.sentAt = time() - 5
+    state.heardAt = time() - GuildShare.QUIET_ANSWER - 1
+    GuildShare:OnHello("Cid Smith", hello, "GUILD")
+    Check("one heard right after our own hello is not answered", not GuildShare.answerPending)
+    GuildShare:OnHello("Cid Smith", hello, "GUILD", true)
+    Check("unless they say they just loaded", GuildShare.answerPending == true)
+    GuildShare.answerPending, GuildShare.sentAt = nil, nil
+    state.heardAt = time() - 10
+    Comm:CHAT_MSG_ADDON(nil, Comm.PREFIX, "N" .. hello, "GUILD", "Cid Smith")
+    Check("and on the guild channel that reads as a fresh hello", GuildShare.answerPending == true)
+    -- An answer asked for within a minute of the last waits for the minute
+    -- to pass; it is not dropped, and one answer covers everyone heard.
+    GuildShare.answerPending = nil
+    GuildShare.answerAt = time() - 10
+    local before = #timers
+    GuildShare:OnHello("Cid Smith", hello, "GUILD", true)
+    GuildShare:OnHello("Ann Smith", anaHello, "GUILD", true)
+    Check("a hello back asked for within a minute of the last waits instead of being dropped",
+        GuildShare.answerPending == true)
+    local tried = GuildShare.helloTried or 0
+    for i = before + 1, #timers do timers[i].fn() end
+    Check("and goes out once for everyone heard meanwhile", (GuildShare.helloTried or 0) == tried + 1
+        and not GuildShare.answerPending, GuildShare.helloTried)
+    GuildShare.answerAt = nil
+    GuildShare.bySender["ann smith"].top = nil
+end
+
 -- The other account already named in Settings is not taken again.
 bob.db.shareIn = bob.db.shareIn or {}
 bob.db.shareIn["dee smith"] = { name = "Dee Smith", account = "0123456789ab", hashes = {}, credit = {} }
 GuildShare:OnHello("Dee Smith", "0123456789ab:zz", "GUILD")
 Check("a guildmate who is your other account is left to account sharing", GuildShare.byId["0123456789ab"] == nil)
+Check("and the check says why", GuildShare.passed["Dee Smith"] == "your other account, shared by name")
 bob.db.shareIn["dee smith"] = nil
 
 -- Counts that are not play are refused.
@@ -359,10 +416,63 @@ do
     Check("and shows no rate until he has his own, not even the guild's", loot.rows[1].chance == nil
         and loot.rows[1].rate == nil, loot.rows[1].chance)
     Check("with no value off it", loot.rows[1].perKill == nil)
-    bob.db.tracker.mobs["Test Gnoll"] = Tally(30, 0, { ["Guild Test Fang"] = 3 })
+    -- Past twenty kills the guild's corpses count beside his in Drop Rate
+    -- and Per Kill, for the items already on his table (2026-11-04).
+    local Value = ns.Value
+    local worthOf = Value.WorthOf
+    Value.WorthOf = function(_, name) return (name == "Guild Test Fang" or name == "Guild Test Tail") and 100 or nil end
+    bob.db.tracker.mobs["Test Gnoll"] = Tally(30, 0, { ["Guild Test Fang"] = 3, ["Guild Test Tail"] = 6 })
+    GuildShare:DropsChanged()
     loot = ns.LootTableUI:Table("Test Gnoll")
-    Check("past twenty kills the rate is his own", loot.rows[1].chance == 10, loot.rows[1].chance)
-    Check("his tally was never added to", bob.db.tracker.mobs["Test Gnoll"].kills == 30)
+    local function LootRow(name)
+        for _, row in ipairs(loot.rows) do
+            if row.name == name then return row end
+        end
+    end
+    local function Near(a, b) return a and math.abs(a - b) < 0.001 end
+    local fangRow, tailRow = LootRow("Guild Test Fang"), LootRow("Guild Test Tail")
+    Check("past twenty kills the guild's corpses count beside his", Near(fangRow.chance, 13 / 70 * 100), fangRow.chance)
+    Check("an item the guild never had is spread over every kill", Near(tailRow.chance, 6 / 70 * 100), tailRow.chance)
+    Check("Per Kill follows the blended rate", Near(fangRow.perKill, 13 / 70 * 100), fangRow.perKill)
+    Check("and so does the worth a kill at the top", Near(loot.worth, 13 / 70 * 100 + 6 / 70 * 100), loot.worth)
+    Check("his kills and counts stay his own", loot.kills == 30 and fangRow.dropped == "3 of 30" and fangRow.total == "x3",
+        fangRow.dropped)
+    Check("no row is added for what only the guild had", #loot.rows == 2, #loot.rows)
+    Check("his tally was never added to", bob.db.tracker.mobs["Test Gnoll"].kills == 30
+        and bob.db.tracker.mobs["Test Gnoll"].items["Guild Test Fang"] == 3)
+    Check("the kill tally's own worth is untouched", Near(Value:FromTally("Test Gnoll"), 30),
+        Value:FromTally("Test Gnoll"))
+
+    -- A guild corpse that said how many it gave counts them.
+    bob.db.guildDrops["Test Gnoll|Redridge Mountains|Camp"].items["Guild Test Fang"].count = 20
+    GuildShare:DropsChanged()
+    loot = ns.LootTableUI:Table("Test Gnoll")
+    fangRow = LootRow("Guild Test Fang")
+    Check("a bigger stack from the guild lifts Per Kill", Near(fangRow.perKill, 13 / 70 * (23 / 13) * 100), fangRow.perKill)
+    bob.db.guildDrops["Test Gnoll|Redridge Mountains|Camp"].items["Guild Test Fang"].count = 10
+
+    -- A mob split by zone takes the guild's kills in that zone only.
+    bob.db.guildDrops["Test Gnoll|Duskwood|"] = { mob = "Test Gnoll", zone = "Duskwood", corpses = 30,
+        items = { ["Guild Test Fang"] = { name = "Guild Test Fang", count = 30, corpses = 30 } } }
+    GuildShare:DropsChanged()
+    local whole = GuildShare:LootFor("Test Gnoll")
+    local redridge = GuildShare:LootFor("Test Gnoll\tRedridge Mountains")
+    local duskwood = GuildShare:LootFor("Test Gnoll\tDuskwood")
+    Check("a whole name takes every zone", whole and whole.kills == 70 and whole.items["Guild Test Fang"].corpses == 40,
+        whole and whole.kills)
+    Check("a zone's line takes that zone only", redridge.kills == 40 and duskwood.kills == 30
+        and duskwood.items["Guild Test Fang"].corpses == 30)
+    Check("a zone with nothing from the guild gives nothing", GuildShare:LootFor("Test Gnoll\tWestfall") == nil)
+    bob.db.guildDrops["Test Gnoll|Duskwood|"] = nil
+    GuildShare:DropsChanged()
+
+    -- Off, his own numbers only.
+    GuildShare:SetOn(false)
+    loot = ns.LootTableUI:Table("Test Gnoll")
+    Check("with guild sharing off the rate is his own", LootRow("Guild Test Fang").chance == 10, LootRow("Guild Test Fang").chance)
+    Check("and so is the worth a kill", Near(loot.worth, 30), loot.worth)
+    GuildShare:SetOn(true)
+    Value.WorthOf = worthOf
 
     -- Off, the rows leave; the data stays.
     GuildShare:SetOn(false)
@@ -410,7 +520,49 @@ do
     local corpses = Guild(cid).corpses
     ns.HandleSlash("share guild forget")
     Check("forget without confirm only explains", ns.db.shareGuild == true and Guild(cid).corpses == corpses)
+    printed = {}
+    ns.Comm:NoteGuild("Gus Smith", "G")
+    ns.Comm:NoteGuild("Gus Smith", "P")
+    ns.Comm:NoteGuild("Gus Smith-Realm", "M", "WHISPER")
+    ns.Share:NoteUnmatched("Zed")
+    ns.HandleSlash("share guild check")
+    local all = table.concat(printed, "\n")
+    Check("the guild check lists who was heard on the guild channel",
+        all:find('heard on guild: "Gus Smith", kinds GP, 2 message', 1, true) ~= nil, all)
+    Check("and is kept for Claude", ns.db.lastProbe and ns.db.lastProbe.check == "guild check")
+    Check("it says how old the session is and what the hellos did",
+        all:find("this session started", 1, true) ~= nil and all:find("hellos tried", 1, true) ~= nil, all)
+    Check("it lists whispers by the name the game gave",
+        all:find('heard by WHISPER: "Gus Smith-Realm", kinds M, 1 message', 1, true) ~= nil, all)
+    Check("and whispers no sharing knew",
+        all:find('whispers not matched to anyone: "Zed", 1', 1, true) ~= nil, all)
+    Check("and each guildmate's sync", all:find("guildmate ", 1, true) ~= nil
+        and all:find("their manifest", 1, true) ~= nil and all:find("whispered hello went to", 1, true) ~= nil, all)
+    timers = {}
+    GuildShare:FollowUp()
+    for _, timer in ipairs(timers) do timer.fn() end
+    timers = {}
+    local kept = table.concat(ns.db.lastProbe.lines, "\n")
+    Check("a while later it adds what came back to the same probe",
+        kept:find("30 s later: hellos tried", 1, true) ~= nil
+        and kept:find('30 s later: heard on guild "Gus Smith"', 1, true) ~= nil, kept)
     ns.Print = print
+end
+
+-- A whisper that names its sender by the first name alone still finds the
+-- guildmate heard on the guild channel, but only when no other shares it.
+do
+    Switch(cid)
+    local saved = GuildShare.bySender
+    local ana, other = { name = "Ana Smith" }, { name = "Ana Jones" }
+    GuildShare.bySender = { ["ana smith"] = ana }
+    Check("an exact name finds them", GuildShare:PartnerFor("Ana Smith-Realm") == ana)
+    Check("so does the first name alone", GuildShare:PartnerFor("Ana") == ana)
+    Check("another first name does not", GuildShare:PartnerFor("Bob") == nil)
+    GuildShare.bySender["ana jones"] = other
+    Check("two guildmates with that first name: neither is guessed", GuildShare:PartnerFor("Ana") == nil)
+    Check("their whole names still work", GuildShare:PartnerFor("Ana Jones") == other)
+    GuildShare.bySender = saved
 end
 
 -- A save from before this existed loads with it off.

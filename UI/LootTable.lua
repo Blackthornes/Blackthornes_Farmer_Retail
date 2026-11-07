@@ -51,7 +51,8 @@ local BOTTOM = 34
 
 -- The number columns, right to left, in pixels.
 local COLUMNS = {
-    { key = "perKill", title = L["PER KILL"], width = 70 },
+    -- Wide enough for the coins' three columns (UI/Coins.lua).
+    { key = "perKill", title = L["PER KILL"], width = 100 },
     { key = "rate",    title = L["RATE"],     width = 50 },
     { key = "total",   title = L["TOTAL"],    width = 44 },
     -- "123 of 1204" once a mob passes a hundred kills.
@@ -136,6 +137,16 @@ function LootTableUI:Table(mobName)
         out.basis = details and details.basis
     end
 
+    -- From the player's own MIN_KILLS on, the guild's corpses count beside
+    -- theirs in Drop Rate and Per Kill, for the items already listed
+    -- (GuildShare:LootFor; the owner, 2026-11-04). Nothing else moves.
+    local guild
+    if loot.rated and ns.GuildShare and ns.GuildShare.LootFor then
+        local ok, got = pcall(ns.GuildShare.LootFor, ns.GuildShare, loot.mob)
+        if ok and type(got) == "table" and (tonumber(got.kills) or 0) > 0 then guild = got end
+    end
+    local shift = 0
+
     for _, item in ipairs(loot.items) do
         local id = Value and Value:ItemID(item.name)
         local row = {
@@ -148,21 +159,54 @@ function LootTableUI:Table(mobName)
         }
 
         if loot.rated then
-            row.chance = item.chance
-            row.rate = Tracker.FormatChance(item.chance)
+            local chance, perCorpse = item.chance, item.perCorpse
+            if guild then
+                chance, perCorpse = LootTableUI.Blend(item, loot.kills, guild)
+            end
+            row.chance = chance
+            row.rate = Tracker.FormatChance(chance)
 
             local unit = Value and Value:WorthOf(item.name, id)
-            if unit then row.perKill = item.corpses / loot.kills * item.perCorpse * unit end
+            if unit then
+                row.perKill = chance / 100 * perCorpse * unit
+                -- The worth a kill at the top follows the rows.
+                shift = shift + row.perKill - item.corpses / loot.kills * item.perCorpse * unit
+            end
         end
         -- A quest item says so where its worth would be (2026-10-18).
         if not row.perKill and Value and Value:IsQuest(item.name, id) then row.quest = true end
         -- Until then no rate shows, not even the guild's or the shipped
         -- data's: finding them is the player's own (the owner, 2026-10-15).
+        -- From then the guild's corpses join them above, with no word of it.
 
         out.rows[#out.rows + 1] = row
     end
 
+    if out.worth and shift ~= 0 then out.worth = math.max(0, out.worth + shift) end
+
     return out
+end
+
+--- One row's Drop Rate (0 to 100) and how many come in a drop, the player's
+--- `item` (Tracker:LootTable's) over `kills` blended with `guild`
+--- (GuildShare:LootFor): every corpse counts the same, the player's or a
+--- guildmate's. A guild corpse that never said how many it gave counts as
+--- the player's own average.
+function LootTableUI.Blend(item, kills, guild)
+    local own = tonumber(item.corpses) or 0
+    local perCorpse = tonumber(item.perCorpse) or 1
+    local theirs = guild.items and guild.items[item.name]
+    local guildCorpses = theirs and tonumber(theirs.corpses) or 0
+    local allKills = (tonumber(kills) or 0) + (tonumber(guild.kills) or 0)
+    if allKills <= 0 then return item.chance or 0, perCorpse end
+
+    local chance = math.min(100, (own + guildCorpses) / allKills * 100)
+    local drops = own + guildCorpses
+    if drops <= 0 then return chance, perCorpse end
+    local counted = theirs and math.min(tonumber(theirs.counted) or 0, guildCorpses) or 0
+    local amount = own * perCorpse + (theirs and tonumber(theirs.count) or 0)
+        + (guildCorpses - counted) * perCorpse
+    return chance, amount / drops
 end
 
 --------------------------------------------------------------------------------
@@ -240,6 +284,13 @@ local function CreateRow(row)
         cell:SetWidth(column.width)
         row.cells[column.key] = cell
         right = right + column.width + GAP
+    end
+
+    -- What it adds to a kill, as the game's coins, each in its own
+    -- column, at the PER KILL column's right edge.
+    if ns.Coins then
+        row.coins = ns.Coins.Create(row, function() return Theme.CreateLabel(row, "small", "text", "RIGHT") end)
+        ns.Coins.Place(row.coins, row.cells.perKill, "RIGHT", 0, 0)
     end
 
     row.name = Theme.CreateLabel(row, "small", "text")
@@ -388,7 +439,12 @@ local function UpdateRow(row, data)
         row.fill:Hide()
     end
 
-    if data.perKill then
+    local coins = rawget(row, "coins")
+    if coins then ns.Coins.Set(coins, nil) end
+    if data.perKill and coins then
+        row.cells.perKill:SetText("")
+        ns.Coins.Set(coins, data.perKill)
+    elseif data.perKill then
         row.cells.perKill:SetText(ns.Value.Coins(data.perKill))
         row.cells.perKill:SetTextColor(Theme.Unpack("good"))
     elseif data.quest then
