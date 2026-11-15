@@ -20,9 +20,10 @@ The rules:
   they do nothing on Retail. A new Forever feature that needs one of these
   is a question for the owner.
 
-Baseline: Forever `main` at `fb9c791` (2026-11-07, Forever 1.8.0: camp
-worth, quality rings and coin columns, My Professions Only, Bobber Beam,
-guild sharing fixes), merged in the third catch-up (before it `e8bbd19`,
+Baseline: Forever `main` at `eb3d82d` (2026-11-15, Forever 1.18.0: loot
+beacons, node sound, the map gem, quest count position, TSM price sources,
+Mute All Sounds, Window Spots, session timer, vendor-only rankings),
+merged in the fourth catch-up (before it `fb9c791`, PR #27, `e8bbd19`,
 PR #25, and `16167e1`, PR #3). `git diff 16167e1 HEAD` on Retail's `main` shows every line below.
 
 **Keep it current:** every Retail-only PR adds or updates its entry here in
@@ -301,11 +302,9 @@ which have no Retail version yet (the owner approved the words,
   is Retail's ("Farmer is new on Retail...").
 - `UI/Settings.lua`: no "Craft or Sell:" row (it needs Tradeskills;
   `/farm tooltip craft` still answers); the TSM and Auctionator hover no
-  longer names Tradeskills.
-- `UI/Main.lua` `UI:AddRowHint` (a spot's hover, once the search footer)
-  ends with "Click a row to put it in chat.", not Forever's line about
-  Classic spots;
-  `UI/LootTable.lua` and `UI/Rankings.lua` name TSM or Auctionator when no
+  longer names Tradeskills; "Price Order:" has no hover (Forever's names
+  Tradeskills; the fourth catch-up).
+- `UI/LootTable.lua` and `UI/Rankings.lua` name TSM or Auctionator when no
   price addon is loaded; `Logic/Value.lua` `/farm value` help says
   "at auction prices"; `Data/Database.lua` `PROVENANCE.forever` is "from
   your own play"; `Logic/Search.lua` `/farm data` drops the "Classic spots"
@@ -418,5 +417,25 @@ beacons knew only nodes the player had gathered, and a new player saw none
   gold, since Retail has no skill numbers for them.
 - Test `tools/test_retailsparkle.lua`.
 
-**Sync rule: Keep Retail** for these lines; Blend Forever's other changes
-to the sparkles.
+Forever took this over in 1.15.0 (veins on other-language clients) and
+added a colour from the number on the tooltip's line (`tipSkill`,
+`tipNeed`). Retail took Forever's version in the fourth catch-up, with
+`NodeSparkle.TIP_COLORS = false`, so a node told by its tooltip stays gold
+here (Retail's lines name an expansion's skill, "Khaz Algar Herbalism",
+with no number to weigh). `tools/test_germanveins.lua` checks gold, then
+Forever's colours with the switch on. `BOOK_LINES` is Forever's.
+
+**Sync rule: Blend.** Take Forever's changes to the tooltip check; keep
+`TIP_COLORS` false and its guard in `ColorFor`.
+
+## 19. Node Sound for Retail's races
+
+`UI/NodeSparkle.lua` `NodeSparkle:FallbackRace()` (fourth catch-up): the
+Character voice ("Follow me!") knows only Classic's eight races
+(`FOLLOW_ME`). A race not in it says its side's line, the orc's for the
+Horde and the human's otherwise, where Forever always says the human's.
+Tested in `tools/test_nodesound.lua`. The real lines for Retail's races
+can be added to `FOLLOW_ME` once their sound IDs are seen in game.
+
+**Sync rule: Keep Retail** for `FallbackRace` and its call; take Forever's
+other changes.

@@ -1774,8 +1774,19 @@ function NodeSparkle:VoiceFile(voice)
         local ok, value = pcall(UnitSex, "player")
         if ok and type(value) == "number" then sex = value end
     end
-    local pair = race and self.FOLLOW_ME[race] or self.FOLLOW_ME.Human
+    local pair = race and self.FOLLOW_ME[race] or self.FOLLOW_ME[self:FallbackRace()]
     return sex == 3 and pair[2] or pair[1]
+end
+
+--- Retail: a race with no line of its own here (Blood Elf, Draenei, Worgen,
+--- Goblin, Pandaren, the allied races, Dracthyr, Earthen, Haranir) says its
+--- side's: the human's for the Alliance, the orc's for the Horde.
+function NodeSparkle:FallbackRace()
+    if type(UnitFactionGroup) == "function" then
+        local ok, side = pcall(UnitFactionGroup, "player")
+        if ok and side == "Horde" then return "Orc" end
+    end
+    return "Human"
 end
 
 --- Play the sound for the node `guid`, once, unless one played lately.

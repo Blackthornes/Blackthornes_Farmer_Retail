@@ -1083,8 +1083,9 @@ function SettingsUI:BuildLootPage()
     controls.otherPriceAddons:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Which of them is asked first (the owner, 2026-10-26).
-    local orderRow = pages:Row("loot", 1, L["Price Order:"],
-        L["Only used when Tradeskills is off. With Tradeskills on, Farmer uses the same prices Tradeskills shows."])
+    -- Retail: no hover, since it named Tradeskills (docs/retail-differences.md
+    -- section 13).
+    local orderRow = pages:Row("loot", 1, L["Price Order:"], nil)
     local orderNames = { L["TSM First"], L["Auctionator First"] }
     controls.priceOrder = Widgets.CreateChoice(orderRow, {
         min = 1, max = 2, step = 1, value = 1,

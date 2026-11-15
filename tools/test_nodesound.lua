@@ -94,6 +94,17 @@ _G.UnitRace = function() return "Skyborne", "Skyborne" end
 _G.UnitSex = function() return 2 end
 NodeSparkle:SetVoice("character")
 suite.check("a race with no line falls back to a human's", NodeSparkle:VoiceFile() == NodeSparkle.FOLLOW_ME.Human[1])
+-- Retail: a newer race says its side's line.
+local realFaction = _G.UnitFactionGroup
+_G.UnitRace = function() return "Goblin", "Goblin" end
+_G.UnitFactionGroup = function() return "Horde", "Horde" end
+suite.check("Retail: a Horde race with no line says the orc's", NodeSparkle:VoiceFile() == NodeSparkle.FOLLOW_ME.Orc[1])
+_G.UnitRace = function() return "Worgen", "Worgen" end
+_G.UnitFactionGroup = function() return "Alliance", "Alliance" end
+_G.UnitSex = function() return 3 end
+suite.check("Retail: an Alliance race with no line says the human's", NodeSparkle:VoiceFile() == NodeSparkle.FOLLOW_ME.Human[2])
+_G.UnitFactionGroup = realFaction
+_G.UnitSex = function() return 2 end
 NodeSparkle:SetVoice("loud")
 suite.check("anything else is off", ns.db.nodeVoice == "off")
 

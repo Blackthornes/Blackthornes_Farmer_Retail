@@ -120,6 +120,13 @@ ever touch the Forever addon. So:
   client's words (`NodeSparkle:SkillWords`, the Professions book too);
   such nodes sparkle gold. Tested in `tools/test_retailsparkle.lua`. Not
   yet seen in game.
+  Forever took it over later; Retail keeps them gold with
+  `NodeSparkle.TIP_COLORS = false` (Forever colours them by the number on
+  the tooltip's line, which Retail's lines don't carry).
+- Node Sound's Character voice (from Forever 1.14.0): a race with no
+  "Follow me!" line in `FOLLOW_ME` says its side's, the orc's for the
+  Horde, else the human's (`NodeSparkle:FallbackRace`). Not yet seen in
+  game.
 - The rest of this file describes the Forever addon; read it as the
   starting point, not as what Retail has.
 
