@@ -174,7 +174,8 @@ def build_sandbox(saved_text):
     # harvest, and a sandbox that inherited it would be testing against his
     # data instead of its own.
     shutil.copytree(ROOT, repo,
-                    ignore=shutil.ignore_patterns(".git", "Data_Harvested.lua"))
+                    ignore=shutil.ignore_patterns(".git", "Data_Harvested.lua",
+                                                  "Data_Harvested_corpses.txt"))
 
     # A real install nests the flavour folder and the account name, which is
     # what the script has to search through.
@@ -188,6 +189,14 @@ def build_sandbox(saved_text):
         handle.write(saved_text)
 
     return sandbox, repo, os.path.join(sandbox, "client")
+
+
+def side_notes(repo):
+    """The corpse notes the import keeps beside the data, in tools/."""
+    path = os.path.join(repo, "tools", "Data_Harvested_corpses.txt")
+    if not os.path.isfile(path):
+        return ""
+    return open(path, encoding="utf-8").read()
 
 
 def run_import(repo, client, *extra):
@@ -235,7 +244,9 @@ def main():
         # 29 of 47 corpses is 62%, and the eight-corpse mob is under the
         # twenty-corpse floor, so exactly one rate should appear.
         check("a well-sampled mob gets its rate", "chance = 62" in text, text)
-        check("a thin sample gets none", "too few for a rate" in text, text)
+        notes = open(os.path.join(repo, "tools", "Data_Harvested_corpses.txt"),
+                     encoding="utf-8").read()
+        check("a thin sample gets none", "too few for a rate" in notes, notes)
         check("exactly one rate is published",
               text.count("chance = ") == 1, text.count("chance = "))
 
@@ -578,6 +589,44 @@ def main():
                   open(os.path.join(repo, "tools", "farmer.ico"), "rb").read() == data)
         finally:
             shutil.rmtree(sandbox, ignore_errors=True)
+
+    # -- Keeping what the shipped file knows -----------------------------------
+    sandbox, repo, client = build_sandbox(stamped(SAVED))
+    try:
+        data = os.path.join(repo, "Data", "Data_Harvested.lua")
+        first = run_import(repo, client)
+        check("keep: the first import works", first.returncode == 0, first.stderr)
+        original = open(data, encoding="utf-8").read()
+        total = int(re.search(r"(\d+) corpses looted", original).group(1))
+
+        # A shipped spot this save does not have.
+        extra = ('DB:RegisterItem({\n    name = "Old Tooth",\n    id = 777,\n    sources = {\n'
+                 '        { name = "Old Wolf", zone = "Durotar", provenance = "forever" },\n'
+                 '            -- 3 of 40 corpses\n    },\n})\n\n')
+        marked = original.replace("DB:RegisterItem(", extra + "DB:RegisterItem(", 1)
+        marked = re.sub(r"(\d+) corpses looted", "%d corpses looted" % (total + 40), marked, count=1)
+        with open(data, "w", encoding="utf-8") as handle:
+            handle.write(marked)
+
+        refused = run_import(repo, client)
+        check("keep: without the flag a smaller save is refused",
+              refused.returncode != 0 and "--keep-published" in refused.stderr, refused.stderr)
+
+        kept = run_import(repo, client, "--keep-published")
+        check("keep: with the flag it works", kept.returncode == 0, kept.stderr)
+        merged = open(data, encoding="utf-8").read()
+        check("keep: the shipped spot is still there",
+              'name = "Old Wolf"' in merged and "-- 3 of 40 corpses" in side_notes(repo))
+        check("keep: the notes leave the data file", "corpses\n" not in merged.replace("corpses looted", ""))
+        check("keep: the item keeps its id", "id = 777," in merged)
+        check("keep: the header counts both sides",
+              "%d corpses looted" % (total + 40) in merged, merged[:120])
+
+        again = run_import(repo, client, "--keep-published")
+        check("keep: a second run changes nothing",
+              again.returncode == 0 and open(data, encoding="utf-8").read() == merged)
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
 
     for failure in failures:
         print("FAIL -- %s" % failure, file=sys.stderr)

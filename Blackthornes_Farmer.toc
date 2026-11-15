@@ -48,6 +48,7 @@ Logic\WorldDrops.lua
 Logic\RankUp.lua
 Logic\TopFarm.lua
 Logic\Goals.lua
+Logic\SessionTimer.lua
 Logic\Session.lua
 Logic\XP.lua
 Logic\Stats.lua
@@ -98,6 +99,7 @@ UI\LootTable.lua
 UI\Rankings.lua
 UI\RankUp.lua
 UI\Recap.lua
+UI\SessionTimer.lua
 UI\KillGoal.lua
 UI\Grinding.lua
 UI\RoadToMax.lua
@@ -105,6 +107,7 @@ UI\Stats.lua
 UI\MapMarkers.lua
 UI\Heat.lua
 UI\GrindPins.lua
+UI\MapToggle.lua
 UI\Arrow.lua
 UI\TooltipShift.lua
 UI\ItemTooltip.lua

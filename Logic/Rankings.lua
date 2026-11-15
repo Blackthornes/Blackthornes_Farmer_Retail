@@ -26,10 +26,9 @@ local CREATURE_KINDS = { mob = true, skinning = true }
 
 --- Every mob name the database gives a drop rate for.
 local function RatedMobs(names)
-    for name, entries in pairs(ns.DB:ByName()) do
-        for _, entry in ipairs(entries) do
-            local source = entry.source
-            if source.chance and CREATURE_KINDS[source.kind or "mob"] then
+    for name, sources in pairs(ns.DB:ByName()) do
+        for _, source in ipairs(sources) do
+            if source.chance and CREATURE_KINDS[ns.DB.KindOf(source)] then
                 names[name] = true
                 break
             end
@@ -45,10 +44,9 @@ function Rankings:Spot(mobName)
     local name, zone = ns.Tracker.SplitKey(mobName)
     local best, here
 
-    for _, entry in ipairs(ns.DB:ByName()[name] or {}) do
-        local source = entry.source
+    for _, source in ipairs(ns.DB:ByName()[name] or {}) do
         -- Classic's generated rows are for the search (Data_ClassicDrops).
-        if CREATURE_KINDS[source.kind or "mob"] and not source.searchOnly then
+        if CREATURE_KINDS[ns.DB.KindOf(source)] and not source.searchOnly then
             if not best or (source.minLevel or 0) < (best.minLevel or 0) then
                 best = source
             end
@@ -199,6 +197,64 @@ function Rankings.WithoutUncommon(value, details)
     return total, kept
 end
 
+-- The owner said build it (2026-11-15, from a mockup): a tick box on
+-- Rankings that prices every drop at what a vendor pays, not the auction
+-- house. Drops a vendor won't buy count as nothing. Off unless ticked,
+-- kept in `rankingsVendorOnly` (account wide, never rename it). It moves
+-- `outsideVersion` too, so the rank-up order is laid out again.
+
+function Rankings.VendorOnly()
+    return ns.db ~= nil and ns.db.rankingsVendorOnly == true
+end
+
+function Rankings:SetVendorOnly(on)
+    if not ns.db then return end
+    on = on and true or false
+    if (ns.db.rankingsVendorOnly == true) == on then return end
+    ns.db.rankingsVendorOnly = on
+    self.outsideVersion = self.outsideVersion + 1
+    if ns.RankingsUI then ns.RankingsUI:Refresh() end
+end
+
+--- What a vendor pays for one of a priced drop, or nil.
+function Rankings.VendorOf(drop)
+    local id = drop.id
+    if not id and ns.Tracker and ns.Tracker.LookOf then id = ns.Tracker:LookOf(drop.name).id end
+    if not id and ns.Value.ItemID then id = ns.Value:ItemID(drop.name) end
+    if not id then return nil end
+    local price = ns.Value:VendorPrice(id)
+    if type(price) == "number" and price > 0 then return price end
+    return nil
+end
+
+--- A worth and its details with every drop at its vendor price: coin and
+--- the drops a vendor buys, best first. A fresh details table; the one
+--- given is untouched.
+function Rankings.WithVendorPrices(value, details)
+    local kept = {}
+    for key, field in pairs(details) do kept[key] = field end
+    kept.priced = {}
+    local total = tonumber(details.coin) or 0
+    for _, drop in ipairs(details.priced or {}) do
+        local vendor = drop.from == "vendor" and drop.unit or Rankings.VendorOf(drop)
+        if vendor and vendor > 0 then
+            local copy = {}
+            for key, field in pairs(drop) do copy[key] = field end
+            local unit = tonumber(drop.unit) or 0
+            if unit > 0 then
+                copy.perKill = (drop.perKill or 0) * vendor / unit
+            else
+                copy.perKill = 0
+            end
+            copy.unit, copy.from = vendor, "vendor"
+            kept.priced[#kept.priced + 1] = copy
+            total = total + copy.perKill
+        end
+    end
+    table.sort(kept.priced, function(a, b) return (a.perKill or 0) > (b.perKill or 0) end)
+    return total, kept
+end
+
 --- The zone part of a kill's place, "The Sepulcher, Silverpine Forest":
 --- the zone the client named (GetRealZoneText), which inside a dungeon is
 --- the dungeon.
@@ -234,9 +290,8 @@ function Rankings:InDungeon(mobName)
     end
 
     local any = false
-    for _, entry in ipairs(ns.DB:ByName()[name] or {}) do
-        local source = entry.source
-        if CREATURE_KINDS[source.kind or "mob"] then
+    for _, source in ipairs(ns.DB:ByName()[name] or {}) do
+        if CREATURE_KINDS[ns.DB.KindOf(source)] then
             if not SourceInside(source) then return false end
             any = true
         end
@@ -259,6 +314,7 @@ end
 function Rankings:Entry(mobName)
     local value, details = ns.Value:ForMob(mobName)
     if value and self.SkipUncommon() then value, details = self.WithoutUncommon(value, details) end
+    if value and self.VendorOnly() then value, details = self.WithVendorPrices(value, details) end
     local summary = ns.Tracker:Summary(mobName)
     local spot = self:Spot(mobName)
 
@@ -363,6 +419,17 @@ ns.RegisterCommand("rankings", L["mobs ranked by what a kill is worth, or only t
         end
         ns.Print(Rankings.SkipUncommon() and L["Rankings leave Uncommon and better drops out of worth per kill."]
             or L["Rankings count every drop in worth per kill."])
+        if ns.SettingsUI then ns.SettingsUI:Refresh() end
+        return
+    end
+    if word == "vendor" then
+        if value == "on" or value == "off" then
+            Rankings:SetVendorOnly(value == "on")
+        else
+            Rankings:SetVendorOnly(not Rankings.VendorOnly())
+        end
+        ns.Print(Rankings.VendorOnly() and L["Rankings use vendor prices."]
+            or L["Rankings use auction prices again."])
         if ns.SettingsUI then ns.SettingsUI:Refresh() end
         return
     end

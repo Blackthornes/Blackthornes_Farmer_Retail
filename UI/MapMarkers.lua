@@ -1170,7 +1170,7 @@ local function Status()
         Util.Plural(#ns.Gathering:Spots(), L["spot"], L["spots"])))
     ns.Print(L.Format("Only your professions: %s.", Util.Colored("accent", OnOff(MapMarkers.MineOnly()))))
     ns.PrintRaw(Util.Colored("muted",
-        "  /farm markers on|off, /farm markers map on|off, /farm markers minimap on|off, /farm markers mine on|off"))
+        "  /farm markers on|off, /farm markers map on|off, /farm markers minimap on|off, /farm markers mine on|off, /farm markers button on|off"))
 end
 
 ns.RegisterCommand("markers", L["gathered herb and ore markers on the maps (on, off, map, minimap)"], function(rest)
@@ -1203,6 +1203,8 @@ ns.RegisterCommand("markers", L["gathered herb and ore markers on the maps (on, 
         MapMarkers:SetMinimap(state == "on")
     elseif which == "mine" and (state == "on" or state == "off") then
         MapMarkers:SetMineOnly(state == "on")
+    elseif which == "button" and (state == "on" or state == "off") and ns.MapToggle then
+        ns.MapToggle:SetButton(state == "on")
     end
 
     Status()

@@ -476,10 +476,7 @@ function UI:BuildBody()
         createRow = function(row) UI:CreateRow(row) end,
         updateRow = function(row, data, index) UI:UpdateRow(row, data, index) end,
         onClick = function(data, button) UI:OnRowClick(data, button) end,
-        onEnter = function(row)
-            UI:ShowValueTooltip(row)
-            UI:AddRowHint(row)
-        end,
+        onEnter = function(row) UI:ShowValueTooltip(row) end,
         onLeave = function() if GameTooltip then GameTooltip:Hide() end end,
         -- The colour of the well the rows sit in.
         fadeKey = "well",
@@ -876,20 +873,6 @@ function UI:ShowValueTooltip(row)
     self:ShowMobTooltip(row, key)
 end
 
---- A spot's hover ends with what a click does, dim (2026-10-29; it was
---- the search footer).
-function UI:AddRowHint(row)
-    local data = row and row.data
-    if not (GameTooltip and data and data.type == "source") then return end
-    if not (GameTooltip.IsOwned and GameTooltip:IsOwned(row)) then
-        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(data.source.name or data.item.name, Theme.Unpack("accent"))
-    end
-    GameTooltip:AddLine(L["Click a row to put it in chat."],
-        Theme.Unpack("dim"), true)
-    GameTooltip:Show()
-end
-
 --- What a kill of `mobName` is worth and what makes it up, beside `owner`.
 --- Shows nothing for a mob with no value.
 --- `colored` names the drops in their rarity colour (Rankings and Grind);
@@ -1118,7 +1101,7 @@ function UI:UpdateRow(row, data, index)
         -- and a recycled row keeps whatever the last one left on it.
         PlaceHeading(row, data.item.id and 38 or 18)
         row.heading:SetTextColor(Theme.Unpack("accent"))
-        row.heading:SetText(("%s  %s"):format(data.item.name,
+        row.heading:SetText(("%s  %s"):format(ns.DB:ClientName(data.item) or data.item.name,
             Util.Colored("muted", ("(%s, %s)"):format(
                 data.item.category, ns.Search:SpotsText(data.count, #data.item.sources)))))
         row.heading:Show()
@@ -1176,7 +1159,7 @@ function UI:UpdateRow(row, data, index)
 
     local source = data.source
 
-    local tint = KIND_COLORS[source.kind]
+    local tint = KIND_COLORS[ns.DB.KindOf(source)]
     if tint then
         row.kindChip:SetColorTexture(tint[1], tint[2], tint[3], 0.16)
         row.kindEdge:SetColorTexture(tint[1], tint[2], tint[3], 0.9)
@@ -1451,6 +1434,22 @@ function UI:SkinningChanged()
 end
 
 ns.DB.hideWatchers.search = function() UI:SkinningChanged() end
+
+--- Names came in from the client (another language): a search that found
+--- little before may find more now, so it runs again while it shows, and
+--- is marked stale for when it does.
+function UI:NamesArrived()
+    if not (self.frame and self.list) then return end
+    if self.lastQuery == nil or self.lastQuery == "" then return end
+    if self.frame:IsShown() and self.tab == "search" then
+        self:BuildChips(self.lastQuery)
+        self:Render()
+    else
+        self.searchStale = true
+    end
+end
+
+ns.DB.namesWatchers.search = function() UI:NamesArrived() end
 
 --- Chips for the source kinds this search turned up, plus All.
 function UI:BuildChips(query)
