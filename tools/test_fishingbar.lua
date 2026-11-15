@@ -96,6 +96,14 @@ suite.check("best lure first", table.concat(order, ",") == "6533,6532,6529", tab
 suite.check("counts from the bags", lures[1].count == 1 and lures[3].count == 3)
 suite.check("a lure needing more skill can't be used", lures[2].usable == false and lures[2].need == 200)
 suite.check("one the skill reaches can", lures[1].usable == true and lures[3].usable == true)
+-- Forever's own "Secret" Bait (+25) is offered too, beside Shiny Bauble.
+bags[268880] = 4
+Fire("BAG_UPDATE_DELAYED")
+local withBait = {}
+for _, entry in ipairs(Bar:Lures(skill)) do withBait[#withBait + 1] = entry.id end
+suite.check("Secret Bait is listed", table.concat(withBait, ",") == "6533,6532,268880,6529", table.concat(withBait, ","))
+bags[268880] = nil
+Fire("BAG_UPDATE_DELAYED")
 -- The gold plaques: the best lure and how many on Add Lure, the skill on Cast.
 local lureLine = Bar.lureButton.second:GetText()
 suite.check("Add Lure names the best lure and how many",
@@ -104,6 +112,24 @@ suite.check("Cast shows the Fishing skill", Bar.cast.first:GetText() == "Cast"
     and Bar.cast.second:GetText() == "Fishing 120 / 150", tostring(Bar.cast.second:GetText()))
 suite.check("Add Lure glows while none is on", Bar.lureGlowing == true)
 suite.check("a catch flashes the Cast plaque without an error", pcall(Bar.Caught, Bar))
+local gemShown = false
+for _, button in ipairs({ Bar.cast, Bar.lureButton }) do
+    for _, gem in ipairs(button.gems or {}) do if gem:IsShown() then gemShown = true end end
+end
+suite.check("no red gems on Cast or Add Lure", not gemShown)
+local castNatural = Bar.cast.natural
+Bar.cast.natural = Bar.BUTTON_HEIGHT
+Bar.lureButton.natural = Bar.BUTTON_HEIGHT + 12
+Bar:FitButtons()
+suite.check("Cast and Add Lure are the same size",
+    Bar.cast:GetHeight() == Bar.lureButton:GetHeight() and Bar.cast:GetHeight() == Bar.BUTTON_HEIGHT + 12,
+    tostring(Bar.cast:GetHeight()) .. " " .. tostring(Bar.lureButton:GetHeight()))
+Bar.lureButton.natural = Bar.BUTTON_HEIGHT
+Bar:FitButtons()
+suite.check("they shrink back together", Bar.cast:GetHeight() == Bar.BUTTON_HEIGHT
+    and Bar.lureButton:GetHeight() == Bar.BUTTON_HEIGHT)
+Bar.cast.natural = castNatural
+Bar:FitButtons()
 
 Bar:ToggleList()
 suite.check("Add Lure opens the list", Bar.list and Bar.list:IsShown())

@@ -122,19 +122,33 @@ end
 -- Same creature or node, same zone, same subzone. Compared case-insensitively
 -- because the two sides come from different places: the seed files are typed
 -- by hand and the harvested ones come back from the client.
+-- Lower case names, kept once each. Loading the data compares every new row
+-- with the rows already on its item, which lowered the same few thousand
+-- names and zones over and over and left the copies for the collector.
+local lowered = {}
+local function Lower(text)
+    local low = lowered[text]
+    if not low then
+        low = text:lower()
+        lowered[text] = low
+    end
+    return low
+end
+DB.Lower = Lower
+
 local function SameSpot(item, source)
     if type(source.name) ~= "string" or source.name == "" then return nil end
 
-    local name = source.name:lower()
-    local zone = source.zone:lower()
-    local location = (source.location or ""):lower()
+    local name = Lower(source.name)
+    local zone = Lower(source.zone)
+    local location = Lower(source.location or "")
 
     for index, existing in ipairs(item.sources) do
         if type(existing.name) == "string"
-            and existing.name:lower() == name
+            and Lower(existing.name) == name
             and type(existing.zone) == "string"
-            and existing.zone:lower() == zone
-            and (existing.location or ""):lower() == location then
+            and Lower(existing.zone) == zone
+            and Lower(existing.location or "") == location then
             return index, existing
         end
     end
@@ -149,15 +163,15 @@ end
 local function SameMob(item, source)
     if type(source.name) ~= "string" or source.name == "" then return nil end
 
-    local name = source.name:lower()
-    local zone = source.zone:lower()
+    local name = Lower(source.name)
+    local zone = Lower(source.zone)
     local classic = source.provenance == DB.DEFAULT_PROVENANCE
 
     for index, existing in ipairs(item.sources) do
         if type(existing.name) == "string"
-            and existing.name:lower() == name
+            and Lower(existing.name) == name
             and type(existing.zone) == "string"
-            and existing.zone:lower() == zone
+            and Lower(existing.zone) == zone
             -- A generated row gives way to any row already there, the
             -- hand-typed ones included, and a measured row takes its place.
             and (source.searchOnly or (existing.searchOnly and not classic)) then
@@ -182,7 +196,9 @@ function DB:AddSource(item, source)
         return nil
     end
 
-    source.kind = source.kind or "mob"
+    -- A mob row leaves kind empty: DB.KindOf reads it as "mob". Most rows
+    -- are mobs, and a ninth field would double each row's table in memory.
+    if source.kind == "mob" then source.kind = nil end
     -- An item the data names a skinning spot for comes from skinning, also
     -- where it was looted (a skin opens a loot window too): DB:FromSkinning.
     if source.kind == "skinning" then item.fromSkinning = true end
@@ -324,6 +340,18 @@ DB.NAMES_PER_FRAME = 25
 -- so a name asked for again and again (the rankings value every drop) asks
 -- the client once until a new name comes in.
 DB.clientMisses = {}
+-- Seconds after login the names start coming in, so the first search on a
+-- client in another language already knows them.
+DB.NAMES_START = 3
+-- Items the client did not name on a pass are asked for again this many
+-- seconds later, up to NAMES_PASSES passes in all: the server answers a
+-- burst of asks slowly and drops some.
+DB.NAMES_RETRY = 6
+DB.NAMES_PASSES = 4
+-- Seconds the lists wait after a name comes in, so a burst redraws once.
+DB.NAMES_SETTLE = 0.5
+-- [key] = function, called (in a pcall) once names have come in.
+DB.namesWatchers = {}
 
 --- Every item with an ID, by ID. Built again only after the data changed.
 function DB:ByID()
@@ -360,6 +388,30 @@ function DB.ClientItemName(id)
     return nil
 end
 
+--- Ask the server to send item `id`, so its name comes in by
+--- GET_ITEM_INFO_RECEIVED. Asking twice is harmless.
+function DB.AskForItem(id)
+    local item = type(C_Item) == "table" and C_Item or nil
+    if item and type(item.RequestLoadItemDataByID) == "function" then
+        pcall(item.RequestLoadItemDataByID, id)
+    end
+end
+
+--- Names came in: tell the watchers once the burst settles.
+function DB:NamesMoved()
+    if self.namesTold then return end
+    local function Tell()
+        DB.namesTold = nil
+        for _, fn in pairs(DB.namesWatchers) do pcall(fn) end
+    end
+    if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+        self.namesTold = true
+        C_Timer.After(DB.NAMES_SETTLE, Tell)
+    else
+        Tell()
+    end
+end
+
 --- Keep the client's name for `item`, when it gives one. True once named.
 function DB:NoteClientName(item)
     if not (item and item.id) then return false end
@@ -374,6 +426,7 @@ function DB:NoteClientName(item)
         self.clientNames[key] = self.clientNames[key] or item
         self.clientNameOf[item] = name
         self.namesVersion = self.namesVersion + 1
+        self:NamesMoved()
     end
     return true
 end
@@ -390,19 +443,46 @@ function DB:LearnClientNames()
         if item then DB:NoteClientName(item) end
     end)
 
-    local index = 0
+    local timer = type(C_Timer) == "table" and type(C_Timer.After) == "function"
+    -- The first pass reads every item; a later one only those still unnamed.
+    local list = {}
+    for _, key in ipairs(self.order) do
+        local item = self.items[key]
+        if item.id then list[#list + 1] = item end
+    end
+    local pass, index, missed = 1, 0, {}
+
     local function Step()
-        local stop = math.min(#self.order, index + DB.NAMES_PER_FRAME)
+        local stop = math.min(#list, index + DB.NAMES_PER_FRAME)
         for i = index + 1, stop do
-            local item = self.items[self.order[i]]
-            if item.id then self:NoteClientName(item) end
+            local item = list[i]
+            if not self:NoteClientName(item) then
+                missed[#missed + 1] = item
+                DB.AskForItem(item.id)
+            end
         end
         index = stop
-        if index < #self.order and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
-            C_Timer.After(0, Step)
+        if index < #list then
+            if timer then C_Timer.After(0, Step) end
+            return
         end
+        -- A pass done: ask again later for the ones the server left out.
+        if #missed == 0 or pass >= DB.NAMES_PASSES or not timer then return end
+        list, index, missed, pass = missed, 0, {}, pass + 1
+        C_Timer.After(DB.NAMES_RETRY, Step)
     end
     Step()
+end
+
+--- On a client in another language, the names start coming in a moment
+--- after login, not on the first search.
+function DB:OnEnable()
+    if Util.EnglishClient() then return end
+    if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+        C_Timer.After(DB.NAMES_START, function() DB:LearnClientNames() end)
+    else
+        self:LearnClientNames()
+    end
 end
 
 --- The item whose client name is `key` (lower case), or nil.
@@ -450,18 +530,25 @@ function DB:CountSources()
     return total
 end
 
---- Every source by the name of its mob or node: [name] = { { item, source },
---- ... }, items in registration order and each item's sources in order, as
---- walking Iterate would find them. Built on first use and again only after
---- a source is added, so valuing a mob no longer walks the whole database.
+--- Every source by the name of its mob or node: [name] = { source, ... },
+--- items in registration order and each item's sources in order, as walking
+--- Iterate would find them. DB:ItemOf(source) gives the item a source is on.
+--- Built on first use and again only after a source is added or the hide
+--- list moves, so valuing a mob no longer walks the whole database. The lists
+--- hold the source rows themselves, not a small table for each pair, and the
+--- map back to items is only laid out again when a source is added.
 function DB:ByName()
-    local stamp = self.changes .. ":" .. self.hiddenVersion
+    local changes = self.changes or 0
+    local stamp = changes .. ":" .. self.hiddenVersion
     if self.byName and self.byNameAt == stamp then return self.byName end
 
+    local mapNew = self.sourceItemAt ~= changes or not self.sourceItem
+    local sourceItem = mapNew and {} or self.sourceItem
     local byName = {}
     for _, key in ipairs(self.order) do
         local item = self.items[key]
         for _, source in ipairs(item.sources or {}) do
+            if mapNew then sourceItem[source] = item end
             local name = source.name
             if type(name) == "string" and not self:HidesSource(source, item) then
                 local list = byName[name]
@@ -469,13 +556,21 @@ function DB:ByName()
                     list = {}
                     byName[name] = list
                 end
-                list[#list + 1] = { item = item, source = source }
+                list[#list + 1] = source
             end
         end
     end
 
+    if mapNew then self.sourceItem, self.sourceItemAt = sourceItem, changes end
     self.byName, self.byNameAt = byName, stamp
     return byName
+end
+
+--- The item a source row belongs to, from the index ByName lays out.
+function DB:ItemOf(source)
+    if not source then return nil end
+    if not self.sourceItem or self.sourceItemAt ~= (self.changes or 0) then self:ByName() end
+    return self.sourceItem[source]
 end
 
 --------------------------------------------------------------------------------
@@ -708,7 +803,14 @@ function DB:Iterate()
     end
 end
 
+--- A source's kind. A mob row keeps none (DB:AddSource), so every reader
+--- that compares or groups by kind goes through this.
+function DB.KindOf(source)
+    return source and source.kind or "mob"
+end
+
 function DB:KindLabel(kind)
+    kind = kind or "mob"
     return self.KIND_LABEL[kind] or kind
 end
 
@@ -725,7 +827,8 @@ DB.KIND_TAG = {
 }
 
 function DB:KindTag(kind)
-    return self.KIND_TAG[kind] or string.upper(kind or "?")
+    kind = kind or "mob"
+    return self.KIND_TAG[kind] or string.upper(kind)
 end
 
 --- "Durnholde Keep, 80.6 45.2" -- whichever parts are known.

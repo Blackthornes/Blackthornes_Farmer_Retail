@@ -474,6 +474,9 @@ local DEFAULTS = {
     -- The bobber's beam or sparkles, on unless unticked (a player found it
     -- hid the bob, 2026-11-07). Never rename it.
     nodeSparkleBobber = true,
+    -- Herbs, veins and schools light up only for your own professions,
+    -- off unless ticked (a player's report, 2026-11-07). Never rename it.
+    nodeSparkleMine = false,
 
     -- The best place to farm a material, on its tooltip.
     itemTooltip = true,
@@ -487,6 +490,8 @@ local DEFAULTS = {
     -- 2026-10-14). Never rename it.
     killTooltipDrops = true,
     questMobCount = true,
+    questMobCountSide = "right",
+    questMobCountMine = false,       -- only your own quests, not the group's
     -- Your kill count beside a mob's nameplate, and what a kill is worth
     -- after it (UI/KillPlates.lua; a player asked, the owner said build it
     -- 2026-10-15). Never rename either.

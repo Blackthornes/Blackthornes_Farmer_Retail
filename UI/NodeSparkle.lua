@@ -12,6 +12,15 @@
 -- on unless unticked; never rename it) is the bobber's own switch, since a
 -- player found the beam hid the bob (2026-11-07).
 --
+-- Loot beacons (a player asked, the owner said build it, 2026-11-09): a
+-- beam on a dead creature the interact key picks while it still has loot,
+-- whatever "Sparkle Look" says, in its own colour, height and width
+-- (`lootBeacon`, off unless ticked; `lootBeaconColor`, nil for gold;
+-- `lootBeaconHeight` and `lootBeaconWidth`, percent, nil for 100; all
+-- account wide, never rename them). It needs the same game settings as the
+-- sparkles, so they are kept on while either is ticked (`Active`). Once the
+-- body is looted, a skinnable corpse's sparkle takes over.
+--
 -- The game tells addons nothing about the nodes around you: not where they
 -- are, not where they sit on screen. The one it does name is the node the
 -- interact key would pick, "softinteract": the one in front of you, close
@@ -141,6 +150,19 @@ NodeSparkle.STYLES = { "sparkles", "beacon" }
 NodeSparkle.BEACON_WIDTH, NodeSparkle.BEACON_HEIGHT = 22, 240
 NodeSparkle.PULSE = 1.2            -- seconds for the beacon to dim, and again to brighten
 
+-- Loot beacons: the colours to pick from, in the drop-down's order, and
+-- how tall and wide the beam may be, in percent of the usual beacon.
+NodeSparkle.LOOT_COLOR_ORDER = { "gold", "white", "green", "blue", "purple", "red" }
+NodeSparkle.LOOT_COLORS = {
+    gold = { 1.0, 0.84, 0.36 },
+    white = { 1.0, 1.0, 1.0 },
+    green = { 0.3, 0.9, 0.3 },
+    blue = { 0.3, 0.65, 1.0 },
+    purple = { 0.75, 0.4, 1.0 },
+    red = { 1.0, 0.3, 0.25 },
+}
+NodeSparkle.LOOT_SIZE_MIN, NodeSparkle.LOOT_SIZE_MAX, NodeSparkle.LOOT_SIZE_STEP = 50, 200, 25
+
 function NodeSparkle:Style()
     local db = ns.db
     if not db then return "beacon" end
@@ -156,7 +178,7 @@ function NodeSparkle:SetStyle(style)
     ns.db.nodeSparkleStylePicked = true
     if self.shownOn then
         local plate, guid = self.shownOn, self.shownGuid
-        self:ShowSparkle(plate, guid)
+        self:ShowSparkle(plate, guid, nil, self.shownLoot)
     end
 end
 
@@ -179,6 +201,62 @@ end
 
 function NodeSparkle:IsEnabled()
     return not (ns.db and ns.db.nodeSparkle == false)
+end
+
+--- Loot beacons are on (off unless ticked).
+function NodeSparkle:LootOn()
+    return ns.db and ns.db.lootBeacon == true or false
+end
+
+--- Sparkles or loot beacons: either needs the game's interact settings.
+function NodeSparkle:Active()
+    return self:IsEnabled() or self:LootOn()
+end
+
+function NodeSparkle:LootColorName()
+    local name = ns.db and ns.db.lootBeaconColor
+    if type(name) == "string" and self.LOOT_COLORS[name] then return name end
+    return "gold"
+end
+
+function NodeSparkle:LootColor()
+    return self.LOOT_COLORS[self:LootColorName()]
+end
+
+-- The colours' names by client language. Kept here rather than in the
+-- locale files, since "Gold" there is money and "Blue" an item quality.
+NodeSparkle.LOOT_COLOR_WORDS = {
+    enUS = { gold = "Gold", white = "White", green = "Green", blue = "Blue", purple = "Purple", red = "Red" },
+    deDE = { gold = "Gold", white = "Weiß", green = "Grün", blue = "Blau", purple = "Lila", red = "Rot" },
+    frFR = { gold = "Doré", white = "Blanc", green = "Vert", blue = "Bleu", purple = "Violet", red = "Rouge" },
+    esES = { gold = "Dorado", white = "Blanco", green = "Verde", blue = "Azul", purple = "Morado", red = "Rojo" },
+    ruRU = { gold = "Золотой", white = "Белый", green = "Зелёный", blue = "Синий", purple = "Фиолетовый", red = "Красный" },
+    zhCN = { gold = "金色", white = "白色", green = "绿色", blue = "蓝色", purple = "紫色", red = "红色" },
+}
+NodeSparkle.LOOT_COLOR_WORDS.esMX = NodeSparkle.LOOT_COLOR_WORDS.esES
+
+--- The colour's name as the player reads it.
+function NodeSparkle.LootColorLabel(key)
+    local locale = type(GetLocale) == "function" and GetLocale() or "enUS"
+    local words = NodeSparkle.LOOT_COLOR_WORDS[locale] or NodeSparkle.LOOT_COLOR_WORDS.enUS
+    return words[key] or words.gold
+end
+
+local function SizeOf(value)
+    value = tonumber(value)
+    if not value then return 100 end
+    local step = NodeSparkle.LOOT_SIZE_STEP
+    value = math.floor(value / step + 0.5) * step
+    return math.max(NodeSparkle.LOOT_SIZE_MIN, math.min(NodeSparkle.LOOT_SIZE_MAX, value))
+end
+NodeSparkle.LootSize = SizeOf
+
+function NodeSparkle:LootHeight()
+    return SizeOf(ns.db and ns.db.lootBeaconHeight)
+end
+
+function NodeSparkle:LootWidth()
+    return SizeOf(ns.db and ns.db.lootBeaconWidth)
 end
 
 --------------------------------------------------------------------------------
@@ -221,7 +299,7 @@ end
 --- Farmer turned on that is now lower again was turned back by the
 --- player: it is left as they have it, now and later.
 function NodeSparkle:ApplySettings()
-    if not ns.db or not self:IsEnabled() then return false end
+    if not ns.db or not self:Active() then return false end
     if InCombat() then
         self.applyAfterCombat = true
         return false
@@ -286,12 +364,50 @@ function NodeSparkle:SetEnabled(on)
         self:ApplySettings()
         self:Refresh()
     else
-        self.applyAfterCombat = nil
         self:LowerReach()
+        if self:LootOn() then
+            -- Loot beacons still need the game's settings.
+            self:SafeRefresh()
+            return
+        end
+        self.applyAfterCombat = nil
         self:RestoreSettings()
         self:HideSparkle()
         pcall(self.VeilIcon, self)
     end
+end
+
+function NodeSparkle:SetLoot(on)
+    ns.db.lootBeacon = on and true or false
+    if on then
+        self.restoreAfterCombat = nil
+        ns.db.nodeSparkleCVarsLeft = nil
+        self:ApplySettings()
+    elseif not self:IsEnabled() then
+        self.applyAfterCombat = nil
+        self:RestoreSettings()
+        self:HideSparkle()
+        pcall(self.VeilIcon, self)
+        return
+    end
+    self:SafeRefresh()
+end
+
+function NodeSparkle:SetLootColor(name)
+    ns.db.lootBeaconColor = (name ~= "gold" and self.LOOT_COLORS[name]) and name or nil
+    self:SafeRefresh()
+end
+
+function NodeSparkle:SetLootHeight(value)
+    value = SizeOf(value)
+    ns.db.lootBeaconHeight = value ~= 100 and value or nil
+    self:SafeRefresh()
+end
+
+function NodeSparkle:SetLootWidth(value)
+    value = SizeOf(value)
+    ns.db.lootBeaconWidth = value ~= 100 and value or nil
+    self:SafeRefresh()
 end
 
 --------------------------------------------------------------------------------
@@ -614,6 +730,9 @@ function NodeSparkle:Kind(name, guid)
     if type(name) ~= "string" or name == "" then return nil end
     if ns.DB and ns.DB:IsHiddenSource(name) then return nil end
     if self:IsNode(name) then return "node" end
+    -- A vein or herb the data names only in English (a German client says
+    -- "Kupfervorkommen", the data "Copper Vein"): the game's own tooltip
+    -- names the skill it needs in the client's words.
     if guid and self:TooltipGathers(guid) then return "node" end
     if ns.Fishing and ns.Fishing.IsSchool and ns.Fishing.IsSchool(name) then return "school" end
     if self.IsChest(name) then return "chest" end
@@ -650,24 +769,30 @@ function NodeSparkle:IsNode(name)
 end
 
 --------------------------------------------------------------------------------
--- Retail: a node told by the game's own tooltip
+-- Nodes told by the game's tooltip
 --
--- Retail ships none of Classic's herb and ore lists, so the names above are
--- only the nodes the player has gathered, and a new player saw no beacon at
--- all (a player's report, 2026-10-31). The game's tooltip for a herb or vein
--- names the skill under its name ("Herbalism", "Requires Mining", "Khaz Algar
--- Herbalism"), so a game object whose tooltip carries Herbalism or Mining in
--- the client's own words is a node too. The words come from the client by ID
--- (`Gathering.ClientNames`) and from the player's Professions book, where
--- the skill line names it, so a German client reads "Kräuterkunde".
+-- Herbs are known on any client by their item's client name, but veins are
+-- known only by the data's English name, so a German "Kupfervorkommen" never
+-- matched "Copper Vein" until the player had mined one (a player's report,
+-- 2026-11-07). The game's tooltip for a vein or herb names the skill it
+-- needs ("Requires Mining", "Benötigt Bergbau"), and the client names the
+-- skills by ID (Gathering.ClientNames, the Professions book), so a line
+-- under the name that holds one of those words makes the object a node, in
+-- any language. Read only when the name alone did not say, kept a second a
+-- guid. Brought over from Retail Farmer.
 --------------------------------------------------------------------------------
 
 NodeSparkle.GATHER_SKILLS = { "Herbalism", "Mining" }
-NodeSparkle.BOOK_LINES = { [182] = true, [186] = true }
+-- Retail: a node told by its tooltip sparkles gold. Retail's tooltips name an
+-- expansion's skill ("Khaz Algar Herbalism") with no number Farmer can weigh
+-- against the skill it reads, so the colour by skill stays off for them.
+NodeSparkle.TIP_COLORS = false
+-- The Professions book's skill lines, by the English skill.
+NodeSparkle.BOOK_LINES = { [182] = "Herbalism", [186] = "Mining", [2944] = "Herbalism", [2946] = "Mining" }
 
-local skillWords, skillWordsKey = nil, nil
-
---- The words a tooltip may name Herbalism or Mining by, in lower case.
+--- The words the client may use for the gathering skills, lower case:
+--- { [word] = English skill }. Built each time a tooltip is read (at most
+--- once a second a guid), since the client may name a skill only later.
 function NodeSparkle:SkillWords()
     local book = {}
     if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
@@ -677,59 +802,124 @@ function NodeSparkle:SkillWords()
                 if index then
                     local got, name, _, _, _, _, _, line = pcall(GetProfessionInfo, index)
                     name = got and Readable(name) or nil
-                    if name and self.BOOK_LINES[ns.Harvest.ReadableNumber(line) or 0] then book[#book + 1] = name end
+                    local english = self.BOOK_LINES[ns.Harvest.ReadableNumber(line) or 0]
+                    if name and english then book[#book + 1] = { name, english } end
                 end
             end
         end
     end
-    local key = table.concat(book, "|")
-    if skillWords and skillWordsKey == key then return skillWords end
-
     local words = {}
-    local function Keep(word)
-        if type(word) == "string" and #word >= 4 then words[word:lower()] = true end
+    local function Keep(word, english)
+        if type(word) == "string" and #word >= 4 then words[word:lower()] = english end
     end
     for _, english in ipairs(self.GATHER_SKILLS) do
-        Keep(english)
+        Keep(english, english)
         if ns.Gathering and ns.Gathering.ClientNames then
-            for word in pairs(ns.Gathering.ClientNames(english)) do Keep(word) end
+            for word in pairs(ns.Gathering.ClientNames(english)) do Keep(word, english) end
         end
     end
-    for _, word in ipairs(book) do Keep(word) end
-    skillWords, skillWordsKey = words, key
+    for _, entry in ipairs(book) do Keep(entry[1], entry[2]) end
     return words
 end
 
---- Does the game's tooltip for the game object `guid` name Herbalism or
---- Mining? Asked again only when the object changes.
+--- Whether the tooltip of the game object the interact key picks names a
+--- gathering skill under its name. Also keeps the skill (English) and the
+--- number on that line, if any, for the colour (`tipSkill`, `tipNeed`).
 function NodeSparkle:TooltipGathers(guid)
     if type(guid) ~= "string" or not guid:find("^GameObject%-") then return false end
-    if self.tipGuid == guid and self.tipAt and GetTime and (GetTime() - self.tipAt) < 1 then
+    if self.tipGuid == guid and self.tipAt and type(GetTime) == "function" and (GetTime() - self.tipAt) < 1 then
         return self.tipAnswer
     end
-    local answer = false
+    local answer, skill, need = false, nil, nil
     local get = Field(_G.C_TooltipInfo, "GetUnit")
     if type(get) == "function" then
         local ok, data = pcall(get, UNIT)
         local lines = ok and Field(data, "lines")
         if type(lines) == "table" then
             local words = self:SkillWords()
-            -- The first line is the name.
             for index = 2, #lines do
                 local text = Readable(Field(lines[index], "leftText"))
                 if type(text) == "string" and text ~= "" then
                     local lower = text:lower()
-                    for word in pairs(words) do
-                        if lower:find(word, 1, true) then answer = true; break end
+                    for word, english in pairs(words) do
+                        if lower:find(word, 1, true) then
+                            answer, skill = true, english
+                            need = tonumber(text:match("(%d+)"))
+                            break
+                        end
                     end
                 end
                 if answer then break end
             end
         end
     end
-    self.tipGuid, self.tipAnswer = guid, answer
+    self.tipGuid, self.tipAnswer, self.tipSkill, self.tipNeed = guid, answer, skill, need
     self.tipAt = type(GetTime) == "function" and GetTime() or nil
     return answer
+end
+
+--------------------------------------------------------------------------------
+-- My Professions Only
+--
+-- Off unless ticked (`nodeSparkleMine`, never rename it): every herb, vein
+-- and fish school lights up for every character, as before. Ticked, a herb
+-- lights up only for a character who knows Herbalism, a vein for Mining and
+-- a school for Fishing (a player expected the map markers' box to do it,
+-- 2026-11-07). Chests, quest things and the bobber are never held back, and
+-- a node whose skill can't be told, or a character whose skills the client
+-- won't give, still lights up. The skills are read by skill line, so any
+-- language works (MapMarkers.ReadKnown).
+--------------------------------------------------------------------------------
+
+NodeSparkle.KNOWN_EVERY = 10
+NodeSparkle.KIND_OF_NODE = { herb = "Herbalism", ore = "Mining" }
+
+function NodeSparkle:MineOnly()
+    return ns.db and ns.db.nodeSparkleMine == true or false
+end
+
+--- The gathering skills this character knows, { [English] = true }, or
+--- nil when the client won't say. Read again every KNOWN_EVERY seconds.
+function NodeSparkle:KnownSkills()
+    local now = type(GetTime) == "function" and GetTime() or 0
+    local kept = self.known
+    if kept and now - kept.at < self.KNOWN_EVERY then return kept.skills end
+    local skills = ns.MapMarkers and ns.MapMarkers.ReadKnown and ns.MapMarkers.ReadKnown() or nil
+    self.known = { at = now, skills = skills }
+    return skills
+end
+
+--- The English skill a node named `name` needs: the data's, else what the
+--- player gathered there, else what its tooltip names. Nil when none says.
+function NodeSparkle:NodeSkill(name, guid)
+    local skill = self:NodeNeeds(name)
+    if skill then return skill end
+    local key = self:BaseKey(name)
+    local gathering = ns.db and ns.db.gathering
+    if key and type(gathering) == "table" and type(gathering.nodes) == "table" then
+        for _, entry in pairs(gathering.nodes) do
+            if type(entry) == "table" and type(entry.node) == "string" and entry.node:lower() == key then
+                local found = self.KIND_OF_NODE[entry.kind]
+                if found then return found end
+            end
+        end
+    end
+    if guid and self:TooltipGathers(guid) then return self.tipSkill end
+    return nil
+end
+
+--- Whether a thing of `kind` lights up for this character: always, unless
+--- "My Professions Only" is ticked and it is a herb, vein or school whose
+--- skill the character lacks.
+function NodeSparkle:ForMyProfessions(kind, name, guid)
+    if not self:MineOnly() then return true end
+    local skill
+    if kind == "node" then skill = self:NodeSkill(name, guid)
+    elseif kind == "school" then skill = "Fishing" end
+    if not skill then return true end
+    local known = self:KnownSkills()
+    if type(known) ~= "table" then return true end
+    return known[skill] == true
 end
 
 --- What the interact key points at: its guid, its name, and whether it is a
@@ -794,7 +984,7 @@ end
 --- one that turned it on, and nobody plays with a controller.
 function NodeSparkle:HidesIcon()
     local db = ns.db
-    if not db or not self:IsEnabled() or db.nodeSparkleHideIcon == false then return false end
+    if not db or not self:Active() or db.nodeSparkleHideIcon == false then return false end
     local saved = db.nodeSparkleCVars
     if type(saved) ~= "table" then return false end
     local ours = false
@@ -818,7 +1008,7 @@ end
 --- picks? Only then are those plates its own doing to keep out of sight.
 function NodeSparkle:OwnsPlates()
     local db = ns.db
-    if not db or not self:IsEnabled() then return false end
+    if not db or not self:Active() then return false end
     local saved = db.nodeSparkleCVars
     return type(saved) == "table"
         and (saved.SoftTargetNameplateInteract ~= nil or saved.SoftTargetInteract ~= nil)
@@ -1006,7 +1196,7 @@ function NodeSparkle:MakeBeacon(parent)
         pulse = group
     end
     holder:Hide()
-    return { holder = holder, pulse = pulse,
+    return { holder = holder, pulse = pulse, beam = beam, flare = flare, size = "100:100",
         tinted = { { texture = beam, a = 1 }, { texture = flare, a = 0.8 } } }
 end
 
@@ -1088,7 +1278,7 @@ function NodeSparkle:ColorsOn()
 end
 
 --- What a thing of `kind` sparkles in. `level` is a corpse's.
-function NodeSparkle:ColorFor(kind, name, level)
+function NodeSparkle:ColorFor(kind, name, level, guid)
     if not self:ColorsOn() then return self.GOLD end
     local colors = self.COLORS
     if kind == "quest" then return colors.quest end
@@ -1097,6 +1287,10 @@ function NodeSparkle:ColorFor(kind, name, level)
     local read = type(skills) == "table"
     if kind == "node" then
         local skill, need = self:NodeNeeds(name)
+        if not skill and self.TIP_COLORS and guid and self.tipGuid == guid and self.tipAnswer then
+            -- Told by its tooltip: the skill it names and the number on that line.
+            skill, need = self.tipSkill, self.tipNeed
+        end
         if skill then
             return self.SkillColor(read and skills[skill] or nil, need, read) or self.GOLD
         end
@@ -1108,9 +1302,31 @@ function NodeSparkle:ColorFor(kind, name, level)
     return self.GOLD
 end
 
-function NodeSparkle:ShowSparkle(plate, guid, color)
+--- Size the beacon, in percent of the usual one; only when it changed.
+function NodeSparkle:SizeBeacon(width, height)
+    local light = self.beacon
+    if not light then return end
+    local key = width .. ":" .. height
+    if light.size == key then return end
+    light.size = key
+    local w = self.BEACON_WIDTH * width / 100
+    local h = self.BEACON_HEIGHT * height / 100
+    pcall(light.holder.SetSize, light.holder, w * 3, h)
+    if light.beam then pcall(light.beam.SetSize, light.beam, w, h) end
+    if light.flare then pcall(light.flare.SetSize, light.flare, w * 3, w * 1.4) end
+end
+
+--- Show the light on the plate. With `loot`, the loot beacon: always the
+--- beam, at the loot beacon's own size.
+function NodeSparkle:ShowSparkle(plate, guid, color, loot)
     local frame = self:Build()
     if color then self.shownColor = color end
+    self.shownLoot = loot and true or nil
+    if loot then
+        self:SizeBeacon(self:LootWidth(), self:LootHeight())
+    else
+        self:SizeBeacon(100, 100)
+    end
     self:Tint(self.shownColor)
     if self.shownOn ~= plate then
         frame:ClearAllPoints()
@@ -1126,7 +1342,7 @@ function NodeSparkle:ShowSparkle(plate, guid, color)
     self.shownOn, self.shownGuid = plate, guid
 
     local moving = Moving()
-    local beacon = self.Style(self) == "beacon"
+    local beacon = loot or self.Style(self) == "beacon"
     local light = self.beacon
     if light then
         light.holder:SetShown(beacon)
@@ -1155,7 +1371,7 @@ function NodeSparkle:ShowSparkle(plate, guid, color)
 end
 
 function NodeSparkle:HideSparkle()
-    self.shownOn, self.shownGuid = nil, nil
+    self.shownOn, self.shownGuid, self.shownLoot = nil, nil, nil
     local frame = self.frame
     if not frame then return end
     for _, spark in ipairs(self.sparks or {}) do
@@ -1227,25 +1443,77 @@ function NodeSparkle:SkinnableCorpse(guid, name)
     return level
 end
 
+--------------------------------------------------------------------------------
+-- Loot beacons
+--------------------------------------------------------------------------------
+
+--- What the client says about loot on a body: true, false, or nil when it
+--- has no call for it (or will not say).
+function NodeSparkle.CanLoot(guid)
+    local can = _G.CanLootUnit
+    if type(can) ~= "function" then return nil end
+    local ok, hasLoot = pcall(can, guid)
+    if not ok then return nil end
+    -- A secret value raises when it is tested, so test it inside a pcall.
+    local read, answer = pcall(function()
+        if hasLoot == true then return true end
+        if hasLoot == false then return false end
+        return nil
+    end)
+    if not read then return nil end
+    return answer
+end
+
+--- Did Farmer already open this body's loot window this session?
+function NodeSparkle.Opened(guid)
+    local opened = ns.Harvest and ns.Harvest.opened
+    if type(opened) == "table" and opened[guid] then return true end
+    local corpses = ns.Tracker and ns.Tracker.corpses
+    return type(corpses) == "table" and corpses[guid] ~= nil or false
+end
+
+--- A dead creature the interact key picks that still has loot. Only while
+--- "Loot Beacons" is ticked; a hidden mob gets nothing.
+function NodeSparkle:LootableCorpse(guid, name)
+    if not self:LootOn() then return false end
+    if type(guid) ~= "string" or not guid:find("^Creature%-") then return false end
+    if type(name) == "string" and name ~= "" and ns.DB and ns.DB:IsHiddenSource(name) then return false end
+    if type(UnitIsDead) ~= "function" then return false end
+    local ok, dead = pcall(UnitIsDead, UNIT)
+    if not (ok and dead == true) then return false end
+    local can = self.CanLoot(guid)
+    if can ~= nil then return can end
+    return not self.Opened(guid)
+end
+
 --- Look again at what the interact key points at.
 -- @return "shown", "off", "nothing", "notnode" or "noplate"
 function NodeSparkle:Refresh()
-    if not self:IsEnabled() then self:HideSparkle(); return "off" end
+    if not self:Active() then self:HideSparkle(); return "off" end
     local guid, name, object = self:Facing()
     if guid and not object then
-        local level = self:SkinnableCorpse(guid, name)
+        if self:LootableCorpse(guid, name) then
+            local plate = self:Plate(guid)
+            if not plate then self:HideSparkle(); return "noplate" end
+            self:ShowSparkle(plate, guid, self:LootColor(), true)
+            return "shown"
+        end
+        local level = self:IsEnabled() and self:SkinnableCorpse(guid, name)
         if not level then self:HideSparkle(); return "nothing" end
         local plate = self:Plate(guid)
         if not plate then self:HideSparkle(); return "noplate" end
         self:ShowSparkle(plate, guid, self:ColorFor("corpse", name, level))
         return "shown"
     end
+    if not self:IsEnabled() then self:HideSparkle(); return "off" end
     if not guid then self:HideSparkle(); return "nothing" end
     local kind = self:Kind(name, guid)
+    if kind and not self:ForMyProfessions(kind, name, guid) then kind = nil end
     if not kind then self:HideSparkle(); return "notnode" end
     local plate = self:Plate(guid)
     if not plate then self:HideSparkle(); return "noplate" end
-    self:ShowSparkle(plate, guid, self:ColorFor(kind, name))
+    self:ShowSparkle(plate, guid, self:ColorFor(kind, name, nil, guid))
+    if kind ~= "bobber" then self:SayFound(guid) end
     return "shown"
 end
 
@@ -1258,13 +1526,14 @@ end
 -- @return the value the setting should have now, or nil when left alone
 function NodeSparkle:FitPlateToTarget()
     local db = ns.db
-    if not db or not self:IsEnabled() or InCombat() then return nil end
+    if not db or not self:Active() or InCombat() then return nil end
     local saved = db.nodeSparkleCVars
     local own = type(saved) == "table" and saved.SoftTargetNameplateInteract or nil
     if own == nil then return nil end
     local guid, name, object = self:Facing()
-    -- A corpse to skin keeps the plate: the sparkle hangs on it.
-    local creature = guid and not object and not self:SkinnableCorpse(guid, name)
+    -- A corpse to loot or skin keeps the plate: the light hangs on it.
+    local creature = guid and not object and not self:LootableCorpse(guid, name)
+        and not (self:IsEnabled() and self:SkinnableCorpse(guid, name))
     -- Facing an NPC, the plate goes back to the player's own value; when
     -- that was already on but they show no friendly NPC nameplates, it goes
     -- off, so an NPC gets no bar only Farmer's setting asked for.
@@ -1282,6 +1551,8 @@ end
 -- The game sets up a plate after the events that tell us about it, and may
 -- light its pieces again then: look once more a moment later.
 NodeSparkle.VEIL_AGAIN = 0.1
+-- How long after a loot window closes to look at the body again.
+NodeSparkle.LOOT_AGAIN = 0.2
 
 function NodeSparkle:SafeRefresh()
     pcall(self.FitPlateToTarget, self)
@@ -1338,7 +1609,18 @@ function NodeSparkle:OnEnable()
     ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", function()
         -- A cast the game closed on keeps a raised reach: put it back first.
         if not NodeSparkle.fishing then NodeSparkle:LowerReach() end
-        if NodeSparkle:IsEnabled() then NodeSparkle:ApplySettings() end
+        if NodeSparkle:Active() then NodeSparkle:ApplySettings() end
+    end)
+    -- A body looted keeps the interact key on it: look again once the
+    -- game has marked it empty, so the beacon goes (or the skinning
+    -- sparkle takes over).
+    ns.RegisterEvent(self, "LOOT_CLOSED", function()
+        if not NodeSparkle:LootOn() or NodeSparkle.lootAgain then return end
+        NodeSparkle.lootAgain = true
+        After(NodeSparkle.LOOT_AGAIN, function()
+            NodeSparkle.lootAgain = nil
+            NodeSparkle:SafeRefresh()
+        end)
     end)
     ns.RegisterPlayerEvent(self, "UNIT_SPELLCAST_CHANNEL_START", function(_, _, unit, _, spellID)
         if Readable(unit) == "player" then NodeSparkle:FishingStarted(spellID) end
@@ -1382,14 +1664,28 @@ function NodeSparkle:Check()
     local kind = type(guid) == "string" and guid:match("^(%a+)%-") or nil
     ns.PrintRaw(("  facing: %s (%s)"):format(tostring(name), tostring(kind or (guid and "?" or "nothing"))))
     ns.PrintRaw(("  a node Farmer knows: %s"):format(name and (self:IsNode(name) and "yes" or "no") or "-"))
-    ns.PrintRaw(("  tooltip names a gathering skill: %s"):format(guid and (self:TooltipGathers(guid) and "yes" or "no") or "-"))
     ns.PrintRaw(("  kind: %s"):format(name and tostring(self:Kind(name, guid) or "none") or "-"))
+    ns.PrintRaw(("  my professions only: %s, lights up here: %s"):format(self:MineOnly() and "on" or "off",
+        name and (self:ForMyProfessions(self:Kind(name, guid) or "none", name, guid) and "yes" or "no") or "-"))
+    ns.PrintRaw(("  tooltip names a gathering skill: %s%s"):format(
+        guid and (self:TooltipGathers(guid) and "yes" or "no") or "-",
+        self.tipAnswer and (" (" .. tostring(self.tipSkill) .. " " .. tostring(self.tipNeed or "-") .. ")") or ""))
     local skill, need = self:NodeNeeds(name)
     local color = self.shownColor or self.GOLD
     ns.PrintRaw(("  colors: %s, needs %s %s, corpses %s, skinnable corpse: %s, colour %.2f %.2f %.2f"):format(
         self:ColorsOn() and "on" or "off", tostring(skill or "-"), tostring(need or "-"),
         self:CorpsesOn() and "on" or "off", tostring(self:SkinnableCorpse(guid, name) or "no"),
         color[1], color[2], color[3]))
+    local deadOk, deadNow = false, nil
+    if type(UnitIsDead) == "function" then deadOk, deadNow = pcall(UnitIsDead, UNIT) end
+    local canLoot = guid and self.CanLoot(guid)
+    local lootPlate = guid and not object and self:Plate(guid) or nil
+    ns.PrintRaw(("  loot beacons: %s, dead %s, can loot %s, plate %s, loot beacon %s"):format(
+        self:LootOn() and "on" or "off",
+        (deadOk and deadNow == true) and "yes" or "no",
+        type(_G.CanLootUnit) ~= "function" and "no call" or tostring(canLoot == nil and "?" or (canLoot and "yes" or "no")),
+        guid and not object and (lootPlate and "yes" or "no") or "-",
+        self:LootableCorpse(guid, name) and "yes" or "no"))
     ns.PrintRaw(("  quest: tooltip %s, looted before %s"):format(self:QuestInTooltip() and "yes" or "no",
         name and (self:QuestByLoot(name) and "yes" or "no") or "-"))
     local forUnit = Field(_G.C_NamePlate, "GetNamePlateForUnit")
@@ -1424,9 +1720,107 @@ function NodeSparkle:SetCorpses(on)
     self:SafeRefresh()
 end
 
+function NodeSparkle:SetMine(on)
+    ns.db.nodeSparkleMine = on and true or false
+    self.known = nil
+    self:SafeRefresh()
+end
+
 function NodeSparkle:SetBobber(on)
     ns.db.nodeSparkleBobber = on and true or false
     self:SafeRefresh()
+end
+
+-- A sound when the light finds a node (brought over from Classic Farmer,
+-- 2026-11-09): your own character's "Follow me!" in its race and voice,
+-- the orc peon's "Ready to work!", or the map's ping. The game's own
+-- files and sounds by ID, nothing shipped. `nodeVoice` is "off",
+-- "character", "peon" or "ping", account wide, off unless picked; never
+-- rename it. Once a node, not again for VOICE_GAP seconds, never in a
+-- fight, and never for your own bobber.
+NodeSparkle.VOICES = { "off", "character", "peon", "ping" }
+NodeSparkle.VOICE_GAP = 20
+NodeSparkle.FOLLOW_ME = {   -- [race] = { male, female }
+    Human = { 540711, 540631 }, Dwarf = { 540057, 540004 },
+    NightElf = { 541086, 541066 }, Gnome = { 540474, 540419 },
+    Orc = { 541410, 541337 }, Scourge = { 542744, 542695 },
+    Tauren = { 543048, 542972 }, Troll = { 543288, 543258 },
+}
+NodeSparkle.PEON_READY = 558137
+NodeSparkle.PING_KIT = 3175   -- SOUNDKIT.MAP_PING
+
+function NodeSparkle:Voice()
+    local voice = ns.db and ns.db.nodeVoice
+    if voice == "character" or voice == "peon" or voice == "ping" then return voice end
+    return "off"
+end
+
+function NodeSparkle:SetVoice(voice)
+    ns.db.nodeVoice = (voice == "character" or voice == "peon" or voice == "ping") and voice or "off"
+end
+
+--- The file the picked voice plays, or nil. A race with no line of its
+--- own (Forever's Skyborne) says the human's.
+function NodeSparkle:VoiceFile(voice)
+    voice = voice or self:Voice()
+    if voice == "peon" then return self.PEON_READY end
+    if voice ~= "character" then return nil end
+    local race, sex
+    if type(UnitRace) == "function" then
+        local ok, _, file = pcall(UnitRace, "player")
+        if ok and type(file) == "string" then race = file end
+    end
+    if type(UnitSex) == "function" then
+        local ok, value = pcall(UnitSex, "player")
+        if ok and type(value) == "number" then sex = value end
+    end
+    local pair = race and self.FOLLOW_ME[race] or self.FOLLOW_ME[self:FallbackRace()]
+    return sex == 3 and pair[2] or pair[1]
+end
+
+--- Retail: a race with no line of its own here (Blood Elf, Draenei, Worgen,
+--- Goblin, Pandaren, the allied races, Dracthyr, Earthen, Haranir) says its
+--- side's: the human's for the Alliance, the orc's for the Horde.
+function NodeSparkle:FallbackRace()
+    if type(UnitFactionGroup) == "function" then
+        local ok, side = pcall(UnitFactionGroup, "player")
+        if ok and side == "Horde" then return "Orc" end
+    end
+    return "Human"
+end
+
+--- Play the sound for the node `guid`, once, unless one played lately.
+--- `force` plays it now (picking it in Settings, `try`). True when the
+--- client says it will play.
+function NodeSparkle:SayFound(guid, force)
+    local voice = self:Voice()
+    if voice == "off" then return false end
+    if ns.Muted and ns.Muted() then return false end
+    local id = voice ~= "ping" and self:VoiceFile(voice) or nil
+    if voice == "ping" then
+        if type(PlaySound) ~= "function" then return false end
+    elseif not id or type(PlaySoundFile) ~= "function" then
+        return false
+    end
+    local now = type(GetTime) == "function" and GetTime() or 0
+    if not force then
+        if InCombat() then return false end
+        if guid and guid == self.saidGuid then return false end
+        if self.saidAt and now - self.saidAt < self.VOICE_GAP then
+            self.saidGuid = guid
+            return false
+        end
+    end
+    local ok, willPlay
+    if voice == "ping" then
+        local kit = type(SOUNDKIT) == "table" and SOUNDKIT.MAP_PING or self.PING_KIT
+        ok, willPlay = pcall(PlaySound, kit, "SFX")
+    else
+        ok, willPlay = pcall(PlaySoundFile, id, "Dialog")
+    end
+    if not (ok and willPlay) then return false end
+    self.saidGuid, self.saidAt = guid, now
+    return true
 end
 
 --- A corpse was just skinned: its sparkle goes.
@@ -1434,7 +1828,7 @@ function NodeSparkle:Skinned(guid)
     if guid and self.shownGuid == guid then self:SafeRefresh() end
 end
 
-ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, chest or quest object you face (beacon, sparkles, colors, corpses, bobber, icon, check)"], function(rest)
+ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, chest or quest object you face (beacon, sparkles, colors, corpses, mine, bobber, icon, check)"], function(rest)
     local argument = ns.Util.Trim(rest or ""):lower()
     local word, value = argument:match("^(%a+)%s*(%a*)$")
     if word == "colors" or word == "colours" then
@@ -1457,6 +1851,17 @@ ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, c
         if ns.SettingsUI then ns.SettingsUI:Refresh() end
         return
     end
+    if word == "mine" then
+        local on
+        if value == "on" then on = true
+        elseif value == "off" then on = false
+        else on = not NodeSparkle:MineOnly() end
+        NodeSparkle:SetMine(on)
+        ns.Print(on and L["only herbs, ore and fish for your professions light up."]
+            or L["every herb, vein and fish school lights up."])
+        if ns.SettingsUI then ns.SettingsUI:Refresh() end
+        return
+    end
     if word == "bobber" then
         local on
         if value == "on" then on = true
@@ -1464,6 +1869,26 @@ ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, c
         else on = not NodeSparkle:BobberOn() end
         NodeSparkle:SetBobber(on)
         ns.Print(on and L["your bobber lights up."] or L["your bobber stays plain."])
+        if ns.SettingsUI then ns.SettingsUI:Refresh() end
+        return
+    end
+    if word == "sound" then
+        if value == "try" then
+            if not NodeSparkle:SayFound(nil, true) then ns.Print(L["pick a sound first."]) end
+            return
+        end
+        local voice = (value == "off" or value == "character" or value == "peon" or value == "ping") and value or nil
+        if not voice then
+            local voices, now = NodeSparkle.VOICES, NodeSparkle:Voice()
+            for index, name in ipairs(voices) do
+                if name == now then voice = voices[index % #voices + 1] end
+            end
+        end
+        NodeSparkle:SetVoice(voice)
+        ns.Print(voice == "character" and L["your character says \"Follow me!\" when you find a node."]
+            or voice == "peon" and L["a peon speaks up when you find a node."]
+            or voice == "ping" and L["a ping plays when you find a node."]
+            or L["no sound when you find a node."])
         if ns.SettingsUI then ns.SettingsUI:Refresh() end
         return
     end
@@ -1494,5 +1919,45 @@ ns.RegisterCommand("sparkle", L["turn sparkles on or off for the node, school, c
     else on = not NodeSparkle:IsEnabled() end
     NodeSparkle:SetEnabled(on)
     ns.Print(on and L["sparkles on."] or L["sparkles off."])
+    if ns.SettingsUI then ns.SettingsUI:Refresh() end
+end)
+
+-- Loot beacons have their own settings and command (the owner, 2026-11-09).
+ns.RegisterCommand("lootbeacon", L["light a beam over the body you can loot (on, off, color, height, width)"], function(rest)
+    local argument = ns.Util.Trim(rest or ""):lower()
+    local word, value = argument:match("^(%a+)%s*(%w*)%%?$")
+    if word == "color" or word == "colour" then
+        if not NodeSparkle.LOOT_COLORS[value] then
+            ns.Print(L["pick gold, white, green, blue, purple or red."])
+            return
+        end
+        NodeSparkle:SetLootColor(value)
+        ns.Print(L.Format("loot beacon color: %s.", NodeSparkle.LootColorLabel(value)))
+        if ns.SettingsUI then ns.SettingsUI:Refresh() end
+        return
+    end
+    if word == "height" or word == "width" then
+        local number = tonumber(value)
+        if not number then
+            ns.Print(L["pick a size from 50 to 200."])
+            return
+        end
+        number = NodeSparkle.LootSize(number)
+        if word == "height" then
+            NodeSparkle:SetLootHeight(number)
+            ns.Print(L.Format("loot beacons are %d%% tall.", number))
+        else
+            NodeSparkle:SetLootWidth(number)
+            ns.Print(L.Format("loot beacons are %d%% wide.", number))
+        end
+        if ns.SettingsUI then ns.SettingsUI:Refresh() end
+        return
+    end
+    local on
+    if argument == "on" then on = true
+    elseif argument == "off" then on = false
+    else on = not NodeSparkle:LootOn() end
+    NodeSparkle:SetLoot(on)
+    ns.Print(on and L["loot beacons on."] or L["loot beacons off."])
     if ns.SettingsUI then ns.SettingsUI:Refresh() end
 end)
